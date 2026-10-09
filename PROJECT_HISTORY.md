@@ -168,3 +168,51 @@ The 3 October entries above cover the original discussion: whether the project i
 - Immich install, then the curator app and Qwen tagging.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) and [RUNBOOK.md](RUNBOOK.md) for how it works and how to run it.
+
+## Later on 9 Oct: what was built and what happened
+
+Clock times are only given where they were noted at the time.
+
+**Archive and scan.** The old big folder (24GB) and an `osxphotos` export of an old Photos
+library were copied to the server (`originals/photos-catchall`, `originals/exports/...`), and
+the raw `.photoslibrary` packages were parked in `_apple-libraries-raw/` so they are not
+indexed. `scripts/scan_archive.py` indexed 4,086 files. The first run found 0 Live Photo
+pairs because of a pairing bug; after the fix it found 673. It also found 4 exact-duplicate
+groups and 223 files dated only by file modification time.
+
+**Google.** A Google Takeout export was requested at 11:11; it is waiting for Google's email.
+
+**Browse app.** A read-only web app over the index (grid, filters, photo page with Live video,
+exact duplicates) was written, tested on made-up data and pushed. Run on junipernine2 it
+showed Live badges, played Live videos and showed thumbnails for the 72 CR2 files. One bug
+found in use (a SQLite thread error when closing the connection) was fixed and confirmed gone.
+
+**Date fixes.** Tony asked how to see the 223 file-dated photos; the date-source filter already
+did this (I had wrongly said it was missing). Added an amber `?` on those tiles and a manual
+date correction (one photo or a whole folder), saved in a separate `curator_edits.sqlite`.
+
+**Apple download.** At 12:59 `icloudpd` was still waiting on Apple's indexing. Tony chose to
+pull originals through the Mac instead and left the wait loop running. Switching the Mac's
+system photo library hung, then gave "User is changing the system photo library", then error
+3143 on reopening. A restart, then a new library made the system library, fixed it. By 13:30
+iCloud Photos was on with "Download Originals to this Mac" and photos were arriving.
+
+**Deletion plan.** Tony's aim is to keep a few photos in iCloud, pull weekly to the server and
+clear the rest. Agreed that clearing is gated: archive verified, a second copy on another
+disk, and an approved review list, because deleting in Photos deletes from iCloud and the
+iPhone too.
+
+**Near-duplicates.** Added `scripts/find_similar.py` and a Similar page (difference-hash
+fingerprints, sharpness score, burst time span, Sharpest and Largest suggestions). The first
+trial on 300 photos at 13:42 gave 75 groups, all bursts, which led to adding the sharpness
+score and burst labels. The full run was started after that.
+
+**Challenges overcome in this stretch:** Mac `pip` pointing at a missing Python (used a
+venv); osxphotos dry run on the wrong library; missing destination folders for osxphotos and
+rsync; the Live Photo pairing bug; the SQLite thread error; the Photos system-library switch
+failure.
+
+**Still open:** Apple's indexing (blocking `icloudpd`); the Mac download, export and rsync;
+the full similar-photo run and review; keep/reject marks; Google Takeout download; Immich;
+Qwen tagging; Cloudflare Tunnel + Access; a nightly backup of the SQLite files, in particular
+`curator_edits.sqlite`.

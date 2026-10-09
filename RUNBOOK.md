@@ -187,6 +187,43 @@ rsync -avh --partial --progress ~/photo-export/copy/ aj9@junipernine2:/media/aj9
 
 `-n` makes any rsync a dry run. Use `--partial` with two dashes.
 
+## Apple originals via the Mac (alternative to icloudpd)
+
+Use this while `icloudpd` is stuck on Apple's indexing. Background and reasons are in
+[ARCHITECTURE.md](ARCHITECTURE.md#apple-originals-via-the-mac-in-progress).
+
+1. Check free space on the Mac (`df -h ~`): about 45GB for the originals, plus the same again
+   if you export to the Mac's own disk (export to the external SSD instead if you can).
+2. Photos > Settings > General: the library shown must be the **System Photo Library**. If
+   not, quit Photos, hold **Option** while opening it, choose or create the library you want
+   (create a new empty one if the old ones are 2018 to 2022 libraries), then **Use as System
+   Photo Library**. Do not use an old library for this.
+3. Settings > iCloud: tick **iCloud Photos** and choose **Download Originals to this Mac**.
+4. Keep the Mac awake: `caffeinate -d` in a Terminal tab. Watch "Downloading N items" at the
+   bottom of the Library view, or the disk filling up.
+5. When the count reaches zero, dry-run the export, then export and rsync as in the
+   osxphotos section above (no `--library` flag means the system library; a few shared-album
+   photos will show as missing, which is normal):
+
+```
+export PATH=~/venvs/osxphotos/bin:$PATH
+mkdir -p ~/photo-export/icloud
+osxphotos export ~/photo-export/icloud --directory "{created.year}/{created.mm}" --sidecar xmp --dry-run
+```
+
+Snags met on 9 Oct:
+
+| Symptom | Cause and fix |
+|---|---|
+| Photos shows 1 photo and offers "Use as System Photo Library" | It is open on a library that is not the system one. Make the right one the system library |
+| "Switching the System Photo Library will turn off iCloud Photos..." | Normal. Affects only this Mac's local copies; iCloud and the iPhone keep everything. Click OK, then turn iCloud Photos on in the new library |
+| Spinning wheel after switching | Often just busy. Wait about 10 minutes, check Activity Monitor for CPU use by `Photos` and `photolibraryd` |
+| "User is changing the system photo library" | The first switch is still running or stuck. Do not retry; quit, restart the Mac |
+| "The library could not be opened (3143)" on reopen | The half-switched library is damaged. Restart, hold Option, create a new library, make it the system library |
+
+Then clear iCloud only after the gated checks in the architecture notes. Deleting in
+Photos deletes everywhere.
+
 ## Run the browse app
 
 A read-only web page over the scan index: a thumbnail grid you can filter by year, type
@@ -283,4 +320,7 @@ bursts) and its **Largest** version (best for copies). Both are suggestions only
 - Run the full Apple pull and verify counts.
 - Run the scan on the archive and review the report (dates, duplicates, Live Photo pairs).
 - Google Takeout requested 9 Oct 11:11; download all parts when Google emails.
+- Finish the Mac download, export, rsync and scan; check the Live pairs and counts against Photos.
+- Run `find_similar.py` over the whole archive and review the Similar page.
+- Build keep/reject marks and the review page.
 - Install Immich and run a trial import.
