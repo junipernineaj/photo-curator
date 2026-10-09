@@ -110,7 +110,9 @@ the iCloud web site and downloads the originals.
   `folder` (a date in the folder name such as `2013_02_10`), `mtime` (file modification time,
   the least reliable: copying or exporting resets it).
 - **Live Photo pairing** (`pair_key`): first by Apple's content identifier shared by the still
-  and the video, otherwise a photo and a video with the same name in the same folder.
+  and the video, otherwise a photo and a video with the same name in the same folder. `icloudpd`
+  names a Live clip `IMG_1234_HEVC.MOV` beside `IMG_1234.HEIC`, so a video name ending in
+  `_HEVC` is matched to the still without it. Pairing is rebuilt on every scan.
 - **Resumable:** unchanged files (same size and modification time) are skipped on re-runs.
 - **Report:** counts, exact-duplicate groups, Live pairs, sidecars, date sources.
 

@@ -161,7 +161,8 @@ def build_pair_keys(db):
     """Find Live Photo pairs (a still and its short video).
 
     1. Files sharing an Apple content identifier, if at least two share it.
-    2. Otherwise: same folder + same name stem, one photo and one video.
+    2. Otherwise: same folder + same name stem, one photo and one video. A video named
+       like icloudpd names Live clips (IMG_1234_HEVC.MOV) matches IMG_1234.HEIC.
     A file with a content identifier that nobody else shares still gets a chance
     at step 2 (the still and video do not always both carry the identifier)."""
     db.execute("UPDATE files SET pair_key = NULL")
@@ -172,6 +173,8 @@ def build_pair_keys(db):
     groups = {}
     for fid, path, kind in rows:
         stem = os.path.splitext(path)[0].lower()
+        if kind == "video" and stem.endswith("_hevc"):
+            stem = stem[: -len("_hevc")]
         groups.setdefault(stem, []).append((fid, kind))
     for stem, members in groups.items():
         kinds = {k for _, k in members}
