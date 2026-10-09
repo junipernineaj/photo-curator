@@ -330,6 +330,54 @@ number (`/similar?group=192`).
   heavily brightened or noisy copy can score high; for copies, trust Largest.
 - Re-run it after each scan. Photos fingerprinted by an older version are re-scored automatically.
 
+## Bringing in an old photo folder, and retiring it
+
+Old backup folders found on other disks (for example `/media/aj9/Juniper13/Pictures`, 53GB)
+go into the **Old Photo Folders** bucket, `originals/photos-catchall/<name>/`.
+
+```
+tmux new -s pictures
+rsync -avh --partial --progress --exclude '*.photoslibrary' --exclude '.DS_Store' --exclude 'Thumbs.db' \
+  "$SRC"/ "$DST"/        # DST=.../originals/photos-catchall/<name>
+```
+
+Run it once with `-n` first to see the size. Then rescan (`scripts/scan_archive.py`), run
+`find_similar.py`, and compare the exact-duplicate group count on the Duplicates page before
+and after: a big jump means the folder was mostly repeats.
+
+**Old `.photoslibrary` packages** are not copied whole. Look inside first:
+`du -sh <pkg>/*`, then count files in `originals/` (and `Masters/`, `Modified/` for iPhoto
+libraries). Copy only `originals/` into its own folder, e.g. `iPhoto-Library-originals/`.
+Skip `resources/` (previews and thumbnails), `database/` and `Data/`. File names inside are
+UUIDs; dates still come from EXIF. Albums, captions, faces and edits stay in the package
+databases and are not carried across. Compare two similar-looking packages first, with a
+path-and-size listing diff, and copy only one if they match:
+
+```
+diff <(cd "A.photoslibrary/originals" && find . -type f -printf '%P %s\n' | sort) \
+     <(cd "B.photoslibrary/originals" && find . -type f -printf '%P %s\n' | sort) && echo IDENTICAL
+```
+
+Record from the 9 Oct import of `Pictures`: `iPhoto Library` and `iPhoto Library 3` were
+identical (1,197 originals, 653 JPEG and 544 CR2, 14G each); `Photos Library.photoslibrary`
+(868 originals) was a separate, smaller library, not a copy of the parked one.
+
+### Before deleting the source folder
+
+Never delete a source folder until all of these are done, in this order:
+
+1. **Prove the copy.** Re-run the rsync as a checksum dry run (`-avhnc`, same excludes). It
+   must list no files. For packages, run the same check on the `originals/` folders.
+2. **Second copy of the archive.** The old folder and `photo-archive` may be on the same
+   disk (`Juniper13` holds both). Deleting the old folder then leaves one copy on one
+   drive. Back up `photo-archive` (including `curator_edits.sqlite`) to another disk, and
+   test a restore of a few files, first.
+3. **Decide about the packages.** If albums or captions might matter, move the whole
+   `.photoslibrary` packages (about 35GB for `Pictures`) into `originals/_apple-libraries-raw/`
+   (parked, never indexed) rather than deleting them.
+4. **Then** delete the remainder, with Tony's explicit go-ahead. Claude never deletes
+   photos itself.
+
 ## Git and GitHub
 
 - Claude commits as `Claude <noreply@anthropic.com>`. The repo is public; never commit photos, `.env`, the cookie folder or tokens (the `.gitignore` covers photos, databases and `.env`).
@@ -352,5 +400,7 @@ number (`/similar?group=192`).
 - Google Takeout requested 9 Oct 11:11; download all parts when Google emails.
 - Finish the Mac download, export, rsync and scan; check the Live pairs and counts against Photos.
 - Run `find_similar.py` over the whole archive and review the Similar page.
+- Finish the `Pictures` import (main folder plus the two package `originals/` folders), rescan,
+  run `find_similar.py`, then retire the source folder using the checklist above.
 - Build keep/reject marks and the review page.
 - Install Immich and run a trial import.
