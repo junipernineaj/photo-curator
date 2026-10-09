@@ -176,8 +176,14 @@ def detail(request: Request, fid: int, db=Depends(get_db)):
     row = get_row(db, fid)
     partner = None
     if row["pair_key"]:
-        partner = db.execute(f"SELECT * FROM {FILES} files WHERE pair_key = ? AND id != ?",
-                             (row["pair_key"], fid)).fetchone()
+        # The group can hold several copies of the same Live Photo (e.g. from different
+        # exports), so look for a VIDEO, preferring one in the same folder as this still.
+        partner = db.execute(
+            f"SELECT * FROM {FILES} files WHERE pair_key = ? AND id != ? "
+            f"ORDER BY (kind = 'video') DESC, (path LIKE ? ESCAPE '\\') DESC, id LIMIT 1",
+            (row["pair_key"], fid,
+             posixpath.dirname(row["path"]).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "/%")
+        ).fetchone()
     live_video = None
     if row["kind"] == "photo" and partner and partner["kind"] == "video":
         live_video = partner
