@@ -39,7 +39,7 @@ templates = Jinja2Templates(directory=str(HERE / "templates"))
 def get_db():
     if not os.path.exists(DB):
         raise HTTPException(503, f"Index not found at {DB}. Run scripts/scan_archive.py first.")
-    con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
+    con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, check_same_thread=False)
     con.row_factory = sqlite3.Row
     try:
         yield con
