@@ -671,3 +671,51 @@ Apple’s own data export. At https://privacy.apple.com you can request a copy o
 osxphotos from the Mac. Photos on the Mac would download the full-size originals from iCloud first, which takes time for 30GB but doesn’t use this web-access route.
 
 I’d leave the wait running for now, and decide on a fallback if it’s still blocked by this afternoon.
+
+
+11:am 9th Oct:
+
+while we wait I do have a very large folder of images that perhaps we can build a UI to interrogate  - I can upload them to the junipernine2 server and we can get going with the project - OR - we could do the google piece
+
+Recommending the image folder to unblock app progress sooner.
+Recommending the image folder to unblock app progress sooner.
+Both are good, and they don’t compete. I’d do a quick piece of the Google job first, then the folder.
+
+1. Request the Google Takeout now (about 5 minutes of your time). Google can take hours or days to prepare it, so starting it now means it’s ready while we do other things.
+
+Go to https://takeout.google.com and click Deselect all, then tick only Google Photos.
+Under “All photo albums included”, leave everything selected.
+Choose Export once, file type .zip, and size 50GB.
+Download all the parts when Google emails you, and keep every part. Download links expire after about a week, so don’t leave it.
+2. Then use the big folder to start building the actual app. It’s the better use of the wait, because the Apple pull is blocked on Apple and the folder gives us real photos to build against. I’d start with:
+
+Copy it to junipernine2 under /media/aj9/Juniper13/photo-archive/originals/. It’s a copy only, so your original folder is never touched or deleted.
+A scan script that goes through the folder and records each photo’s date, size, dimensions and a fingerprint in a SQLite database. The fingerprint is a hash for exact duplicates and a perceptual hash for near-duplicates.
+A simple browse page in the style of recipe-app: a thumbnail grid you can filter by date, with duplicate groups to review. It’s the first working version of the curator, and it only reads from disk, with no changes to your files.
+One design point: the spec has Immich as the main viewer, with the curator behind it. Building the browse page straight on the folder first is a shortcut, but nothing is wasted. Later the same page can read from Immich instead.
+
+A few questions so I can tailor it:
+
+Roughly how many photos, how many GB, and what types (HEIC, JPG, scans, videos)?
+Where is the folder now: the Mac, an external drive, or already on the server?
+Is it mostly phone photos with dates built in, or scanned prints that have no date information?
+With those I can write the scan script and the upload command, and I’ll also put the plan into ARCHITECTURE.md and the runbook.
+
+Google confirms the export started at 11:11 with Google Photos as the only item selected (1 of 66), so that part is correct. It’s now a background job, and Google emails you when it’s ready, which could be hours or days.
+
+The screenshot doesn’t show the file type and size, which I’d want to be .zip in 50GB parts. If you picked something else, such as .tgz, that’s fine too.
+
+When the email arrives:
+
+Download every part, and do it within about a week, because the links expire.
+Keep the zips untouched, because immich-go reads them directly. The simplest route is to download them on your Mac, then copy them to /media/aj9/Juniper13/photo-archive/originals/google/ on junipernine2. I’ll give you the copy command when you have the files.
+
+I’ll add the Takeout steps to RUNBOOK.md once we’ve been through it for real.
+
+Meanwhile, back to the big folder of images. I still need three answers to write the scan script:
+
+Roughly how many photos, how many GB, and what types (HEIC, JPG, scans, videos)?
+Where is it now: the Mac, an external drive, or already on the server?
+Mostly phone photos with dates built in, or scanned prints with no date information?
+
+Also check on the wait loop in tmux when you can, and paste the latest status lines if it has changed.
