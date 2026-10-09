@@ -129,10 +129,16 @@ templates.env.filters["day"] = lambda s: (s or "")[:10]
 VISIBLE = "NOT (kind = 'video' AND pair_key IS NOT NULL)"
 
 
-@app.get("/", response_class=HTMLResponse)
-def index(request: Request, db=Depends(get_db), year: str = "", kind: str = "",
-          live: str = "", q: str = "", src: str = "", sort: str = "new", page: int = 1):
-    where, args = [VISIBLE], []
+# The iCloud Shared Photo Library is kept apart (scripts/apple_pull.sh shared-full writes it
+# to originals/apple-shared/) so other people's photos never mix into your own.
+SHARED_PREFIX = "apple-shared/"
+LIB_MINE = "path NOT LIKE 'apple-shared/%'"
+LIB_SHARED = "path LIKE 'apple-shared/%'"
+
+
+def grid(request, db, lib, base_path, year, kind, live, q, src, sort, page):
+    scope = f"{VISIBLE} AND {LIB_SHARED if lib == 'shared' else LIB_MINE}"
+    where, args = [scope], []
     if year.isdigit():
         where.append("substr(taken_at,1,4) = ?")
         args.append(year)
@@ -158,17 +164,30 @@ def index(request: Request, db=Depends(get_db), year: str = "", kind: str = "",
         f"ORDER BY {order} LIMIT ? OFFSET ?", args + [PAGE_SIZE, (page - 1) * PAGE_SIZE]
     ).fetchall()
     years = db.execute(
-        f"SELECT substr(taken_at,1,4) y, COUNT(*) n FROM {FILES} files WHERE {VISIBLE} "
+        f"SELECT substr(taken_at,1,4) y, COUNT(*) n FROM {FILES} files WHERE {scope} "
         f"GROUP BY y ORDER BY y DESC").fetchall()
-    grand = db.execute(f"SELECT COUNT(*), COALESCE(SUM(size),0) FROM {FILES} files WHERE {VISIBLE}").fetchone()
+    grand = db.execute(f"SELECT COUNT(*), COALESCE(SUM(size),0) FROM {FILES} files WHERE {scope}").fetchone()
 
     base = {"year": year, "kind": kind, "live": live, "q": q, "src": src, "sort": sort}
     more_url = None
     if page * PAGE_SIZE < total:
-        more_url = "/?" + urlencode({**{k: v for k, v in base.items() if v}, "page": page + 1})
+        more_url = base_path + "?" + urlencode({**{k: v for k, v in base.items() if v}, "page": page + 1})
     return templates.TemplateResponse(request, "index.html", {
         "rows": rows, "total": total, "years": years, "grand": grand,
-        "f": base, "more_url": more_url, "page": page})
+        "f": base, "more_url": more_url, "page": page,
+        "base_path": base_path, "lib": lib})
+
+
+@app.get("/", response_class=HTMLResponse)
+def index(request: Request, db=Depends(get_db), year: str = "", kind: str = "",
+          live: str = "", q: str = "", src: str = "", sort: str = "new", page: int = 1):
+    return grid(request, db, "mine", "/", year, kind, live, q, src, sort, page)
+
+
+@app.get("/shared", response_class=HTMLResponse)
+def shared(request: Request, db=Depends(get_db), year: str = "", kind: str = "",
+           live: str = "", q: str = "", src: str = "", sort: str = "new", page: int = 1):
+    return grid(request, db, "shared", "/shared", year, kind, live, q, src, sort, page)
 
 
 @app.get("/photo/{fid}", response_class=HTMLResponse)

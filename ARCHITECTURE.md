@@ -130,13 +130,18 @@ no internet). Start it with `uvicorn app.main:app --port 8090` (commands in the 
 
 | Route | What it does |
 |---|---|
-| `/` | Thumbnail grid, 96 per page with a "Load more" button |
+| `/` | "My photos": the thumbnail grid, 96 per page with a "Load more" button. Leaves out anything under `apple-shared/` |
+| `/shared` | "Shared library": the same grid and filters, but only photos under `originals/apple-shared/` (the iCloud Shared Photo Library). Year counts and totals cover that tab only |
 | `/photo/{id}` | Large preview, Live Photo video, metadata, identical copies, similar photos, date-fix box |
 | `/dups` | Groups of byte-identical files (same SHA-1 and size), up to 200 groups, largest first |
 | `/similar` | Near-duplicate groups (see below), 20 per page. Parameters: `kind` (`burst`, `spread`, `unknown`), `sort` (`space`, `size`), `group` (a group number), `page` |
 | `/thumb/{id}`, `/preview/{id}` | Cached JPEGs, 360px and 1600px on the long side |
 | `/file/{id}` | The original file, streamed unchanged (used by "Download original") |
 | `POST /photo/{id}/date` | Saves a manual date (see below) |
+
+The Duplicates and Similar pages and a photo's own page cover everything, shared photos
+included, and show the file path so the source is clear. Keeping the shared library in its own
+folder and tab is what lets us later present "only my photos" without other people's.
 
 **Grid filters** (all combine, and all work as URL parameters): `year`, `kind` (photo or
 video), `live=1` (Live Photos only), `q` (substring of the path, case-insensitive), `src`

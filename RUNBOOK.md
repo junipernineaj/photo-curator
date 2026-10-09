@@ -245,7 +245,8 @@ scripts/apple_pull.sh shared-trial           # 20 most recent, into originals/ap
 scripts/apple_pull.sh shared-full            # everything, in tmux
 ```
 
-Shared-library photos go to `originals/apple-shared/`, apart from your own. The scan indexes
+Shared-library photos go to `originals/apple-shared/`, apart from your own, and appear in the
+browse app's **Shared library** tab (the **My photos** tab leaves them out). The scan indexes
 them (the folder is under `originals/`). **Shared Albums** (albums other people share with you)
 are different: `icloudpd` does not download them, and they showed as "missing" in the
 `osxphotos` export. To keep some, use Add to Library in Photos on the Mac first.

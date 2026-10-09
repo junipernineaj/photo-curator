@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
-<form class="filters" hx-get="/" hx-target="#results" hx-select="#results" hx-swap="outerHTML"
+{% if lib == 'shared' %}<p class="muted small">The iCloud Shared Photo Library: photos shared with you and added by others,
+kept apart from your own. Photos you added to it are in here too.</p>{% endif %}
+<form class="filters" hx-get="{{ base_path }}" hx-target="#results" hx-select="#results" hx-swap="outerHTML"
       hx-push-url="true" hx-trigger="change, keyup changed delay:400ms from:#q">
   <select name="year" aria-label="Year">
     <option value="">All years</option>
@@ -40,7 +42,7 @@
       <span class="date{% if r.date_source == 'mtime' %} guess{% endif %}">{{ r.taken_at | day }}{% if r.date_source == 'mtime' %} ?{% endif %}</span>
     </a>
     {% else %}
-    <p class="empty">Nothing matches those filters.</p>
+    <p class="empty">{% if lib == 'shared' %}Nothing here yet. Run scripts/apple_pull.sh shared-full, then scripts/scan_archive.py.{% else %}Nothing matches those filters.{% endif %}</p>
     {% endfor %}
     {% if more_url %}
     <button class="more" hx-get="{{ more_url }}" hx-select="#grid > *" hx-target="this"
