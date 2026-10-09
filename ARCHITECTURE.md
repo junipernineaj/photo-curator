@@ -107,7 +107,9 @@ the iCloud web site and downloads the originals.
   files, and sidecar or thumbnail files (XMP, AAE and similar).
 - **Reads:** metadata in batches with `exiftool` (JSON), and a SHA-1 of each file.
 - **Capture date and where it came from** (`date_source`), best first: `exif` (camera),
-  `folder` (a date in the folder name such as `2013_02_10`), `mtime` (file modification time,
+  `filename` (a date in the file name, such as `IMG_20180619_220821.jpg`, `PXL_20210531_…`,
+  `BURST20170329111938`; date-only names are stored at 12:00), `folder` (a date in the folder
+  name such as `2013_02_10`), `mtime` (file modification time,
   the least reliable: copying or exporting resets it).
 - **Live Photo pairing** (`pair_key`): first by Apple's content identifier shared by the still
   and the video, otherwise a photo and a video with the same name in the same folder. `icloudpd`
@@ -149,7 +151,7 @@ page cover all sources and show the file path.
 
 **Grid filters** (all combine, and all work as URL parameters): `source`, `year`, `kind` (photo or
 video), `live=1` (Live Photos only), `q` (substring of the path, case-insensitive), `src`
-(date source: `exif`, `folder`, `mtime`, or `manual`), `sort` (`new` or `old`), `page`.
+(date source: `exif`, `filename`, `folder`, `mtime`, or `manual`), `sort` (`new` or `old`), `page`.
 
 **Behaviour**
 

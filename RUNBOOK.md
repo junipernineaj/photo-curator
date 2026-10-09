@@ -141,7 +141,7 @@ scripts/scan_archive.py --report             # summary only
 ```
 
 What it records: size, SHA-1 (for exact duplicates), capture date and where the date
-came from (`exif`, then the `folder` name like `2013_02_10`, then file `mtime`),
+came from (`exif`, then the `filename` such as `IMG_20180619_220821.jpg`, then the `folder` name like `2013_02_10`, then file `mtime`),
 dimensions, camera, Live Photo pairing, and whether an XMP/AAE sidecar exists.
 It skips folders starting with `_`, `.photoslibrary`-style library packages, hidden
 files, and sidecar/thumbnail files. Re-runs skip files that haven't changed.
@@ -250,6 +250,15 @@ browse app under **Source > iCloud: shared library**. The scan indexes
 them (the folder is under `originals/`). **Shared Albums** (albums other people share with you)
 are different: `icloudpd` does not download them, and they showed as "missing" in the
 `osxphotos` export. To keep some, use Add to Library in Photos on the Mac first.
+
+### Re-reading dates from file names (`--redate`)
+
+Files copied in bulk get the copy date as their file date, which is wrong (9 Oct: 5,831
+files dated 2021 or 2022 that were not). Android and WhatsApp names carry the real date.
+`scripts/scan_archive.py --redate` re-reads those for files dated only by `mtime` or
+`folder`, in seconds, without re-scanning any photo. Names without a date (iPhone
+`IMG_4865.JPG`, UUID names such as `…_4_5005_c.jpeg`, Facebook downloads) stay as they are;
+fix those in the app, or leave them marked with the amber "?".
 
 ## Run the browse app
 

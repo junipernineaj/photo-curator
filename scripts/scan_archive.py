@@ -14,6 +14,7 @@ Usage:
   scripts/scan_archive.py                      # scan default archive
   scripts/scan_archive.py --limit 200          # try a small batch first
   scripts/scan_archive.py --report             # print the summary only
+  scripts/scan_archive.py --redate             # re-read dates from file names (quick, index only)
   ARCHIVE=/some/path DB=/some/index.sqlite scripts/scan_archive.py
 
 Re-running is cheap: files whose path, size and mtime are unchanged are skipped.
@@ -51,7 +52,7 @@ CREATE TABLE IF NOT EXISTS files (
   mtime_ns INTEGER NOT NULL,
   sha1 TEXT,
   taken_at TEXT,                    -- ISO 8601, local time, no zone
-  date_source TEXT,                 -- exif | folder | mtime
+  date_source TEXT,                 -- exif | filename | folder | mtime
   width INTEGER, height INTEGER,
   make TEXT, model TEXT,
   content_id TEXT,                  -- Apple Live Photo content identifier
@@ -67,6 +68,12 @@ CREATE INDEX IF NOT EXISTS idx_files_pair ON files(pair_key);
 FOLDER_DATE = re.compile(r"(?<!\d)((?:19|20)\d{2})[_\-.]?(0[1-9]|1[0-2])[_\-.]?(0[1-9]|[12]\d|3[01])(?!\d)")
 FOLDER_YEAR_MONTH = re.compile(r"(?<!\d)((?:19|20)\d{2})[_\-.](0[1-9]|1[0-2])(?!\d)")
 FOLDER_YEAR = re.compile(r"(?<!\d)((?:19|20)\d{2})(?!\d)")
+# Dates that cameras and phones put in file names: IMG_20180619_220821_833.jpg,
+# PXL_20210531_134500182.jpg, BURST20170329111938, IMG_2020-09-04-08523439.jpg,
+# IMG-20190101-WA0001.jpg (date only), 2008-12-25 Christmas.jpg (date only).
+NAME_DATE = re.compile(r"(?<!\d)((?:19|20)\d{2})[-_]?(0[1-9]|1[0-2])[-_]?(0[1-9]|[12]\d|3[01])"
+                       r"(?:[-_ T.]?([01]\d|2[0-3])([0-5]\d)([0-5]\d))?")
+UUID_NAME = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I)
 
 
 def parse_exif_date(value):
@@ -102,6 +109,49 @@ def date_from_path(rel_path):
         if m:
             return datetime(int(m[1]), 1, 1).isoformat()
     return None
+
+
+def date_from_filename(rel_path, today=None):
+    """A date read from the file NAME (see NAME_DATE), or None.
+
+    With a time in the name it is used as is. A date alone is stored at 12:00, the same as a
+    date-only correction made in the app. UUID names and implausible dates are ignored.
+    """
+    name = os.path.basename(rel_path)
+    if UUID_NAME.match(name):
+        return None
+    today = today or datetime.now()
+    for m in NAME_DATE.finditer(name):
+        if m[4] is None and name[m.end():m.end() + 1].isdigit():
+            continue                      # a longer run of digits, not a date
+        try:
+            if m[4] is not None:
+                d = datetime(int(m[1]), int(m[2]), int(m[3]), int(m[4]), int(m[5]), int(m[6]))
+            else:
+                d = datetime(int(m[1]), int(m[2]), int(m[3]), 12)
+        except ValueError:
+            continue
+        if d.date() > today.date():
+            continue
+        return d.isoformat()
+    return None
+
+
+def redate_from_filenames(db):
+    """Re-read dates for files dated only by folder name or file date, using the file name.
+
+    Index only: no photo is touched and nothing is re-hashed. Returns the number changed.
+    """
+    n = 0
+    rows = db.execute("SELECT path FROM files WHERE date_source IN ('mtime', 'folder')").fetchall()
+    for (path,) in rows:
+        d = date_from_filename(path)
+        if d:
+            db.execute("UPDATE files SET taken_at = ?, date_source = 'filename' WHERE path = ?",
+                       (d, path))
+            n += 1
+    db.commit()
+    return n
 
 
 def sha1_of(path):
@@ -219,6 +269,9 @@ def main():
     ap.add_argument("--no-hash", action="store_true", help="skip SHA-1 (faster, no dup check)")
     ap.add_argument("--batch", type=int, default=200)
     ap.add_argument("--report", action="store_true", help="only print the summary")
+    ap.add_argument("--redate", action="store_true",
+                    help="re-read dates from file names for files dated only by folder or file "
+                         "date (index only, quick), then print the summary")
     args = ap.parse_args()
 
     archive = os.path.abspath(args.archive)
@@ -233,7 +286,10 @@ def main():
     db.executescript(SCHEMA)
     print(f"Archive: {archive}\nIndex:   {dbpath}")
 
-    if not args.report:
+    if args.redate:
+        print(f"Dates re-read from file names: {redate_from_filenames(db)} files changed")
+
+    if not args.report and not args.redate:
         known = {p: (s, m) for p, s, m in
                  db.execute("SELECT path, size, mtime_ns FROM files")}
         seen = set()
@@ -252,6 +308,9 @@ def main():
                          or parse_exif_date(t.get("CreateDate"))
                          or parse_exif_date(t.get("MediaCreateDate")))
                 source = "exif" if taken else None
+                if not taken:
+                    taken = date_from_filename(rel)
+                    source = "filename" if taken else None
                 if not taken:
                     taken = date_from_path(rel)
                     source = "folder" if taken else None

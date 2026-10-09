@@ -167,7 +167,7 @@ def grid(request, db, source, year, kind, live, q, src, sort, page):
         like = q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         where.append("path LIKE ? ESCAPE '\\'")
         args.append(f"%{like}%")
-    if src in ("exif", "folder", "mtime", "manual"):
+    if src in ("exif", "filename", "folder", "mtime", "manual"):
         where.append("date_source = ?")
         args.append(src)
     clause = " AND ".join(where)
