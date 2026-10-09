@@ -11,6 +11,7 @@ Commands, settings and fixes for running photo-curator. See
 | Python 3 + `python3-venv` | Run icloudpd in an isolated environment | `sudo apt install -y python3-venv` if `venv` fails |
 | `icloudpd` (PyPI package, in a venv) | Download from iCloud Photos | Installed in `~/venvs/icloudpd`; a standalone executable is also published on the project's GitHub releases page |
 | `tmux` | Keep the long download running if SSH drops | |
+| `exiftool` (`libimage-exiftool-perl`) | Read dates, sizes and camera info for the scan | `sudo apt install libimage-exiftool-perl` |
 | Free disk | Library is roughly 30GB | Juniper13 has 2TB+ free |
 
 Later phases will add `ffmpeg`, OpenCV, `pillow-heif`, `imagehash`, Immich,
@@ -106,6 +107,67 @@ What to do:
 - This version of icloudpd has no option to skip the indexing check, so waiting is the only route.
 - Success looks like `Downloading ... IMG_xxxx.HEIC` lines instead of the indexing message.
 
+## Scan the archive into an index
+
+`scripts/scan_archive.py` walks `/media/aj9/Juniper13/photo-archive/originals/` and
+records one row per photo or video in a SQLite file (`photo-archive/curator.sqlite`,
+outside the repo). It is **read-only on the photos**: it only writes the index.
+
+```
+sudo apt install libimage-exiftool-perl      # needs exiftool
+cd ~/photo-curator && git pull
+scripts/scan_archive.py --limit 200          # try a small batch first
+scripts/scan_archive.py                      # then the lot (resumable)
+scripts/scan_archive.py --report             # summary only
+```
+
+What it records: size, SHA-1 (for exact duplicates), capture date and where the date
+came from (`exif`, then the `folder` name like `2013_02_10`, then file `mtime`),
+dimensions, camera, Live Photo pairing, and whether an XMP/AAE sidecar exists.
+It skips folders starting with `_`, `.photoslibrary`-style library packages, hidden
+files, and sidecar/thumbnail files. Re-runs skip files that haven't changed.
+
+Park raw Apple library packages in `originals/_apple-libraries-raw/` so they are
+never indexed (the exported photos in `originals/exports/` are what we index).
+
+Archive layout so far:
+
+```
+originals/
+  photos-catchall/               untouched copy of the old folder (loose date folders etc.)
+  exports/photos-library-copy/   osxphotos export from "Photos Library copy.photoslibrary"
+  _apple-libraries-raw/          the raw .photoslibrary packages, parked, not indexed
+  apple/                         icloudpd download (waiting on Apple's indexing)
+  google/                        Takeout zips (requested, waiting)
+```
+
+## Apple Photos library export (osxphotos, on the Mac)
+
+For old `.photoslibrary` packages. `osxphotos` is installed in a venv
+(`~/venvs/osxphotos`; the system `pip` on the Mac points at a missing Python).
+
+```
+export PATH=~/venvs/osxphotos/bin:$PATH
+osxphotos info --library "Photos Library copy.photoslibrary"     # counts, no export
+mkdir -p ~/photo-export/copy                                     # DEST must already exist
+osxphotos export ~/photo-export/copy --library "Photos Library copy.photoslibrary" \
+  --directory "{created.year}/{created.mm}" --sidecar xmp --dry-run
+```
+
+Remove `--dry-run` for the real export. Notes from the first run (11GB library):
+shared-album photos show as "missing" (no original in the library), and `--sidecar xmp`
+writes a metadata file for every photo including those, so about two thirds of the
+`.xmp` files have no image next to them. They're harmless; the scan ignores them.
+
+Copy to the server (create the parent folders first, or rsync fails):
+
+```
+ssh aj9@junipernine2 'mkdir -p /media/aj9/Juniper13/photo-archive/originals/exports/photos-library-copy'
+rsync -avh --partial --progress ~/photo-export/copy/ aj9@junipernine2:/media/aj9/Juniper13/photo-archive/originals/exports/photos-library-copy/
+```
+
+`-n` makes any rsync a dry run. Use `--partial` with two dashes.
+
 ## Git and GitHub
 
 - Claude commits as `Claude <noreply@anthropic.com>`. The repo is public; never commit photos, `.env`, the cookie folder or tokens (the `.gitignore` covers photos, databases and `.env`).
@@ -124,5 +186,6 @@ What to do:
 
 - Finish the first trial download and confirm Live Photo pairing and folder layout.
 - Run the full Apple pull and verify counts.
-- Request the Google Takeout (all parts, Photos only).
+- Run the scan on the archive and review the report (dates, duplicates, Live Photo pairs).
+- Google Takeout requested 9 Oct 11:11; download all parts when Google emails.
 - Install Immich and run a trial import.
