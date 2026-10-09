@@ -1,1 +1,30 @@
-./adhoc_scripts
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local config and secrets
+.env
+*.env
+
+# Data — never commit photos, frames or databases
+*.db
+*.sqlite
+*.sqlite3
+data/
+frames/
+*.heic
+*.HEIC
+*.mov
+*.MOV
+*.jpg
+*.JPG
+*.jpeg
+*.png
+
+# One-off hand-off scripts
+adhoc_scripts/
+
+# OS
+.DS_Store
