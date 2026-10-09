@@ -158,11 +158,16 @@ def walk_archive(root):
 
 
 def build_pair_keys(db):
-    """Same folder + same name stem + one photo and one video => Live Photo pair,
-    or the same Apple content identifier anywhere."""
+    """Find Live Photo pairs (a still and its short video).
+
+    1. Files sharing an Apple content identifier, if at least two share it.
+    2. Otherwise: same folder + same name stem, one photo and one video.
+    A file with a content identifier that nobody else shares still gets a chance
+    at step 2 (the still and video do not always both carry the identifier)."""
     db.execute("UPDATE files SET pair_key = NULL")
-    db.execute("UPDATE files SET pair_key = 'cid:' || content_id "
-               "WHERE content_id IS NOT NULL AND content_id != ''")
+    db.execute("UPDATE files SET pair_key = 'cid:' || content_id WHERE content_id IN ("
+               "SELECT content_id FROM files WHERE content_id IS NOT NULL "
+               "AND content_id != '' GROUP BY content_id HAVING COUNT(*) >= 2)")
     rows = db.execute("SELECT id, path, kind FROM files WHERE pair_key IS NULL").fetchall()
     groups = {}
     for fid, path, kind in rows:
@@ -174,10 +179,6 @@ def build_pair_keys(db):
             for fid, _ in members:
                 db.execute("UPDATE files SET pair_key = ? WHERE id = ?",
                            ("stem:" + stem, fid))
-    # a content-id key with only one member is not a pair
-    db.execute("UPDATE files SET pair_key = NULL WHERE pair_key IN ("
-               "SELECT pair_key FROM files WHERE pair_key IS NOT NULL "
-               "GROUP BY pair_key HAVING COUNT(*) < 2)")
     db.commit()
 
 
