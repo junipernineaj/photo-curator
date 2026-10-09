@@ -252,17 +252,33 @@ SIM_PAGE = 20
 
 
 @app.get("/similar", response_class=HTMLResponse)
-def similar_page(request: Request, db=Depends(get_db), page: int = 1):
+def similar_page(request: Request, db=Depends(get_db), page: int = 1, kind: str = "",
+                 sort: str = "space", group: str = ""):
     page = max(page, 1)
     built = db.execute("SELECT v FROM sim.sim_meta WHERE k = 'built_at'").fetchone()
     thr = db.execute("SELECT v FROM sim.sim_meta WHERE k = 'threshold'").fetchone()
     tot = db.execute(
         f"SELECT COUNT(*) n, SUM(f.size) s, SUM(CASE WHEN g.is_best = 1 THEN f.size ELSE 0 END) b, "
         f"COUNT(DISTINCT g.group_id) gc FROM sim.sim_group g JOIN {FILES} f ON f.path = g.path").fetchone()
+    # Which groups to show: all, one by number, or only bursts / spread-over-time / unknown time.
+    where, args = [], []
+    if group.isdigit():
+        where.append("g.group_id = ?")
+        args.append(int(group))
+    if kind == "burst":
+        where.append("i.span_s IS NOT NULL AND i.span_s <= 10")
+    elif kind == "spread":
+        where.append("i.span_s > 10")
+    elif kind == "unknown":
+        where.append("i.span_s IS NULL")
+    clause = ("WHERE " + " AND ".join(where)) if where else ""
+    order = "n DESC, spare DESC" if sort == "size" else "spare DESC, g.group_id"
+    base = (f"FROM sim.sim_group g JOIN {FILES} f ON f.path = g.path "
+            f"LEFT JOIN sim.sim_info i ON i.group_id = g.group_id {clause} GROUP BY g.group_id")
+    shown = db.execute(f"SELECT COUNT(*) FROM (SELECT g.group_id {base})", args).fetchone()[0]
     gids = db.execute(
-        f"SELECT g.group_id, SUM(f.size) - SUM(CASE WHEN g.is_best = 1 THEN f.size ELSE 0 END) AS spare "
-        f"FROM sim.sim_group g JOIN {FILES} f ON f.path = g.path GROUP BY g.group_id "
-        f"ORDER BY spare DESC, g.group_id LIMIT ? OFFSET ?", (SIM_PAGE, (page - 1) * SIM_PAGE)).fetchall()
+        f"SELECT g.group_id, COUNT(*) n, SUM(f.size) - SUM(CASE WHEN g.is_best = 1 THEN f.size ELSE 0 END) AS spare "
+        f"{base} ORDER BY {order} LIMIT ? OFFSET ?", args + [SIM_PAGE, (page - 1) * SIM_PAGE]).fetchall()
     groups = []
     for g in gids:
         members = db.execute(
@@ -273,12 +289,14 @@ def similar_page(request: Request, db=Depends(get_db), page: int = 1):
         info = db.execute("SELECT span_s FROM sim.sim_info WHERE group_id = ?", (g["group_id"],)).fetchone()
         groups.append({"id": g["group_id"], "spare": g["spare"], "members": members,
                        "span": info["span_s"] if info else None})
-    more = page * SIM_PAGE < (tot["gc"] or 0)
+    f = {"kind": kind, "sort": sort, "group": group}
+    q = {k: v for k, v in f.items() if v}
+    more = page * SIM_PAGE < shown
     return templates.TemplateResponse(request, "similar.html", {
-        "groups": groups, "tot": tot, "built": built[0] if built else None,
-        "thr": thr[0] if thr else None, "page": page,
-        "next_url": f"/similar?page={page + 1}" if more else None,
-        "prev_url": f"/similar?page={page - 1}" if page > 1 else None})
+        "groups": groups, "tot": tot, "shown": shown, "f": f,
+        "built": built[0] if built else None, "thr": thr[0] if thr else None, "page": page,
+        "next_url": "/similar?" + urlencode({**q, "page": page + 1}) if more else None,
+        "prev_url": "/similar?" + urlencode({**q, "page": page - 1}) if page > 1 else None})
 
 
 # ---- manual date corrections (written to the separate edits file, never to photos) ----

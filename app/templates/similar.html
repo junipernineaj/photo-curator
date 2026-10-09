@@ -13,9 +13,24 @@ copies). Both are suggestions, not verdicts: you choose.</p>
 <p class="count">{{ tot.gc }} groups, {{ tot.n }} photos
   <span class="muted">· about {{ ((tot.s or 0) - (tot.b or 0)) | human }} is taken up by the non-largest copies
   · built {{ built }}, up to {{ thr }} of 64 bits different</span></p>
+<form class="filters" method="get" action="/similar">
+  <select name="kind" aria-label="Kind of group" onchange="this.form.submit()">
+    <option value="">All groups</option>
+    <option value="burst" {% if f.kind == 'burst' %}selected{% endif %}>Bursts (taken within 10 seconds)</option>
+    <option value="spread" {% if f.kind == 'spread' %}selected{% endif %}>Spread over time (likely copies)</option>
+    <option value="unknown" {% if f.kind == 'unknown' %}selected{% endif %}>Camera time unknown</option>
+  </select>
+  <select name="sort" aria-label="Sort" onchange="this.form.submit()">
+    <option value="space" {% if f.sort != 'size' %}selected{% endif %}>Most spare space first</option>
+    <option value="size" {% if f.sort == 'size' %}selected{% endif %}>Most photos first</option>
+  </select>
+  <input type="search" name="group" value="{{ f.group }}" placeholder="Group number">
+  <button>Go</button>
+</form>
+<p class="muted small">{{ shown }} group{{ '' if shown == 1 else 's' }} shown.</p>
 {% for g in groups %}
 <section class="dupgroup">
-  <h3>{{ g.members | length }} photos <span class="muted small">· {{ g.span | span }} · {{ g.spare | human }} in the others</span></h3>
+  <h3>Group {{ g.id }}: {{ g.members | length }} photos <span class="muted small">· {{ g.span | span }} · {{ g.spare | human }} in the others</span></h3>
   <div class="grid small">
     {% for m in g.members %}
     <a class="cell" href="/photo/{{ m.id }}" title="{{ m.path }}">
