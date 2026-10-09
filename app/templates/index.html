@@ -18,6 +18,7 @@
     <option value="exif" {% if f.src == 'exif' %}selected{% endif %}>Date from camera</option>
     <option value="folder" {% if f.src == 'folder' %}selected{% endif %}>Date from folder name</option>
     <option value="mtime" {% if f.src == 'mtime' %}selected{% endif %}>Date from file (least reliable)</option>
+    <option value="manual" {% if f.src == 'manual' %}selected{% endif %}>Date set by me</option>
   </select>
   <select name="sort" aria-label="Sort">
     <option value="new" {% if f.sort != 'old' %}selected{% endif %}>Newest first</option>

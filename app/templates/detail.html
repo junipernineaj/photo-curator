@@ -20,13 +20,32 @@
   <dl class="meta">
     <dt>File</dt><dd class="path">{{ r.path }}</dd>
     <dt>Taken</dt><dd>{{ r.taken_at or "unknown" }}
-      <span class="muted">({{ {'exif':'from the camera','folder':'guessed from folder name','mtime':'from file date, least reliable'}.get(r.date_source, 'unknown') }})</span></dd>
+      <span class="muted">({{ {'exif':'from the camera','folder':'guessed from folder name','mtime':'from file date, least reliable','manual':'set by you'}.get(r.date_source, 'unknown') }})</span></dd>
     <dt>Size</dt><dd>{{ r.size | human }}{% if r.width %} · {{ r.width }}×{{ r.height }}{% endif %}</dd>
     {% if r.make or r.model %}<dt>Camera</dt><dd>{{ r.make or "" }} {{ r.model or "" }}</dd>{% endif %}
     <dt>Sidecar</dt><dd>{{ "XMP/AAE file present" if r.has_sidecar else "none" }}</dd>
     {% if r.sha1 %}<dt>SHA-1</dt><dd class="mono">{{ r.sha1[:16] }}…</dd>{% endif %}
     <dt>Original</dt><dd><a href="/file/{{ r.id }}" download>Download original</a></dd>
   </dl>
+  <div class="datefix">
+    <h3>Fix the date</h3>
+    {% if done %}<p class="ok">Updated {{ done }} file{{ '' if done == '1' else 's' }}.</p>{% endif %}
+    {% if err %}<p class="bad">{{ err }}</p>{% endif %}
+    <p class="muted small">Saved in the index only. The photo file is never changed, and a
+      re-scan will not undo it.</p>
+    <form method="post" action="/photo/{{ r.id }}/date">
+      <input type="date" name="taken" required value="{{ (r.taken_at or '')[:10] }}">
+      <button name="scope" value="one">Set for this photo{% if live_video %} (and its video){% endif %}</button>
+      {% if n_all > 1 %}
+      <label class="check"><input type="checkbox" name="only_guessed" value="1" checked>
+        only file-dated ones{% if n_guess %} ({{ n_guess }}){% endif %}</label>
+      <button name="scope" value="folder">Set for the folder</button>
+      <p class="muted small">Folder: <span class="mono">{{ folder or '(top level)' }}</span>,
+        {{ n_all }} files directly inside it, {{ n_guess }} of them file-dated.</p>
+      {% endif %}
+      {% if has_override %}<button name="action" value="clear" class="link">Undo my date for this photo</button>{% endif %}
+    </form>
+  </div>
   {% if twins %}
   <div class="twins">
     <h3>Identical copies ({{ twins | length }})</h3>

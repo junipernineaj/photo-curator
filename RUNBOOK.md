@@ -211,7 +211,18 @@ to keep it to the server itself. Cloudflare Access goes in front before it is ex
 outside the house.
 
 Settings (environment variables, all optional): `ARCHIVE` (originals folder), `DB`
-(index file), `THUMBS` (cache folder). Defaults match the layout above.
+(index file), `THUMBS` (cache folder), `EDITS` (your manual corrections). Defaults match the
+layout above.
+
+### Fixing dates by hand
+
+Open a photo and use **Fix the date**. "Set for this photo" changes that photo (and the
+video of a Live Photo); "Set for the folder" changes the files directly inside the same
+folder, by default only the ones dated from file date. Corrections are saved in
+`photo-archive/curator_edits.sqlite` (table `date_override`, with the previous date kept),
+not in the photos and not in the scan index, so re-scanning never undoes them. Filter with
+"Date set by me". "Undo my date for this photo" removes a correction. Back up
+`curator_edits.sqlite` along with `curator.sqlite`: it is the only copy of your decisions.
 
 Notes:
 
