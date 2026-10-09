@@ -17,6 +17,9 @@ ARCHIVE="${ARCHIVE:-/media/aj9/Juniper13/photo-archive}"
 DEST="$ARCHIVE/originals/apple"
 COOKIES="${COOKIES:-$HOME/.icloudpd-cookies}"
 : "${ICLOUD_USER:?Set ICLOUD_USER to your Apple ID email}"
+case "$ICLOUD_USER" in
+  *example.com*|*YOUR-APPLE-ID*) echo "ICLOUD_USER is still a placeholder ($ICLOUD_USER). Set it to YOUR real Apple ID email."; exit 1 ;;
+esac
 
 command -v icloudpd >/dev/null || { echo "icloudpd not found - see docs/INGEST.md"; exit 1; }
 mkdir -p "$DEST" "$COOKIES"
@@ -37,8 +40,12 @@ case "${1:-}" in
     for i in $(seq 1 24); do
       echo "[$(date +%H:%M:%S)] attempt $i of 24"
       icloudpd "${COMMON[@]}" --recent 20 2>&1 | tee "$LOG" | tail -n 15
+      if grep -qE "ERROR|serviceErrors|locked|AUTHENTICATION_FAILED" "$LOG"; then
+        echo "An error (not just indexing) occurred - stopping. Read the output above."
+        rm -f "$LOG"; exit 1
+      fi
       if ! grep -q "not finished indexing" "$LOG"; then
-        echo "Indexing message gone - check the output above, then run: $0 full"
+        echo "No indexing message and no errors - check the output above, then run: $0 full"
         rm -f "$LOG"; exit 0
       fi
       echo "Still indexing; sleeping 20 minutes"; sleep 1200

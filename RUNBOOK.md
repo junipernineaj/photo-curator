@@ -44,7 +44,7 @@ export PATH=~/venvs/icloudpd/bin:$PATH      # add to ~/.bashrc to keep it
 icloudpd --help | head -30
 
 # 3. Tell the script which Apple ID to use
-export ICLOUD_USER='you@example.com'         # your Apple ID email
+export ICLOUD_USER='YOUR-APPLE-ID-EMAIL'     # replace with your real Apple ID email
 ```
 
 ## Download from iCloud

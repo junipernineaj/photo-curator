@@ -34,7 +34,7 @@ icloudpd --help
 ## Steps
 
 ```
-export ICLOUD_USER='you@example.com'
+export ICLOUD_USER='YOUR-APPLE-ID-EMAIL'
 scripts/apple_pull.sh auth      # prompts for password + 2FA code, once
 scripts/apple_pull.sh trial     # 20 most recent photos
 ```
