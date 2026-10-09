@@ -224,6 +224,32 @@ Snags met on 9 Oct:
 Then clear iCloud only after the gated checks in the architecture notes. Deleting in
 Photos deletes everywhere.
 
+## iCloud Shared Photo Library
+
+If you share a library with family, it is a separate iCloud library from your own
+(`PrimarySync`). `icloudpd` only downloads one library at a time, so the shared one needs its
+own run. List the libraries (read-only, downloads nothing):
+
+```
+~/venvs/icloudpd/bin/icloudpd --directory /tmp/icloud-probe --username "$ICLOUD_USER" \
+  --cookie-directory ~/.icloudpd-cookies --password-provider console --mfa-provider console \
+  --list-libraries
+```
+
+Yours printed `PrimarySync` and one `SharedSync-...` name (the name is not kept in this
+repo). Then:
+
+```
+export SHARED_LIBRARY='SharedSync-...'       # exactly as printed
+scripts/apple_pull.sh shared-trial           # 20 most recent, into originals/apple-shared/
+scripts/apple_pull.sh shared-full            # everything, in tmux
+```
+
+Shared-library photos go to `originals/apple-shared/`, apart from your own. The scan indexes
+them (the folder is under `originals/`). **Shared Albums** (albums other people share with you)
+are different: `icloudpd` does not download them, and they showed as "missing" in the
+`osxphotos` export. To keep some, use Add to Library in Photos on the Mac first.
+
 ## Run the browse app
 
 A read-only web page over the scan index: a thumbnail grid you can filter by year, type

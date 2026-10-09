@@ -8,6 +8,11 @@
 #   scripts/apple_pull.sh full            # download everything (resumable)
 #   scripts/apple_pull.sh wait            # retry the trial every 20 min until Apple's
 #                                         # library indexing finishes (max 24 tries)
+#   scripts/apple_pull.sh shared-trial    # iCloud SHARED Photo Library: 20 most recent
+#   scripts/apple_pull.sh shared-full     # iCloud SHARED Photo Library: everything
+#                                         # (needs SHARED_LIBRARY=SharedSync-XXXX, from
+#                                         #  `icloudpd --list-libraries`; saved to
+#                                         #  originals/apple-shared/, apart from your own)
 #
 # If a password or 2FA prompt is needed, run `auth` first (prompts can be hidden in wait mode).
 # Needs ICLOUD_USER (your Apple ID email). Run `full` inside tmux.
@@ -32,7 +37,19 @@ COMMON=(--directory "$DEST" --username "$ICLOUD_USER" --cookie-directory "$COOKI
         --folder-structure "{:%Y/%m}"
         --password-provider console --mfa-provider console)
 
+# The shared library goes in its own folder so it never mixes with your own photos.
+shared_args() {
+  : "${SHARED_LIBRARY:?Set SHARED_LIBRARY to the SharedSync-... name shown by icloudpd --list-libraries}"
+  local sd="$ARCHIVE/originals/apple-shared"
+  mkdir -p "$sd"
+  SHARED=(--directory "$sd" --username "$ICLOUD_USER" --cookie-directory "$COOKIES"
+          --folder-structure "{:%Y/%m}" --library "$SHARED_LIBRARY"
+          --password-provider console --mfa-provider console)
+}
+
 case "${1:-}" in
+  shared-trial) shared_args; icloudpd "${SHARED[@]}" --recent 20 ;;
+  shared-full)  shared_args; icloudpd "${SHARED[@]}" ;;
   auth)  icloudpd "${COMMON[@]}" --auth-only ;;
   trial) icloudpd "${COMMON[@]}" --recent 20 ;;
   full)  icloudpd "${COMMON[@]}" ;;
@@ -57,5 +74,5 @@ case "${1:-}" in
       echo "Still indexing; sleeping 20 minutes"; sleep 1200
     done
     rm -f "$LOG"; echo "Gave up after 24 attempts"; exit 1 ;;
-  *) echo "usage: $0 {auth|trial|full|wait}"; exit 2 ;;
+  *) echo "usage: $0 {auth|trial|full|wait|shared-trial|shared-full}"; exit 2 ;;
 esac
