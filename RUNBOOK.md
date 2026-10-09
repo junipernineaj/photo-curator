@@ -315,8 +315,8 @@ Run it in tmux for the full archive. Then open the **Similar** page in the brows
 Groups are listed with the most space-wasting first. Each group shows how far apart the
 photos were taken (seconds apart means a burst), and marks its **Sharpest** frame (best for
 bursts) and its **Largest** version (best for copies). Both are suggestions only. A photo's own page also lists its similar photos. The page can be filtered to
-**bursts** (within 10 seconds), **spread over time** (the likeliest real copies) or **camera
-time unknown**, sorted by spare space or by number of photos, and a group can be opened by its
+**same photo in several sources** (an iCloud original and an old export, say), **bursts** (one
+source, within 10 seconds), **spread over time** or **camera time unknown**, sorted by spare space or by number of photos, and a group can be opened by its
 number (`/similar?group=192`).
 
 - Results are in `photo-archive/curator_similar.sqlite`. It is derived data: delete it and

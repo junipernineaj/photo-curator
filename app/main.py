@@ -300,35 +300,48 @@ def similar_page(request: Request, db=Depends(get_db), page: int = 1, kind: str 
     tot = db.execute(
         f"SELECT COUNT(*) n, SUM(f.size) s, SUM(CASE WHEN g.is_best = 1 THEN f.size ELSE 0 END) b, "
         f"COUNT(DISTINCT g.group_id) gc FROM sim.sim_group g JOIN {FILES} f ON f.path = g.path").fetchone()
-    # Which groups to show: all, one by number, or only bursts / spread-over-time / unknown time.
-    where, args = [], []
+    # Which groups to show. "cross" = the same picture in more than one source folder
+    # (e.g. an iCloud original and an old export); "burst" = one source, shot within 10 s.
+    src_g = ("CASE WHEN instr(g.path, '/') > 0 THEN substr(g.path, 1, instr(g.path, '/') - 1) "
+             "ELSE '' END")
+    where, args, having = [], [], []
     if group.isdigit():
         where.append("g.group_id = ?")
         args.append(int(group))
-    if kind == "burst":
+    if kind == "cross":
+        having.append(f"COUNT(DISTINCT {src_g}) > 1")
+    elif kind == "burst":
         where.append("i.span_s IS NOT NULL AND i.span_s <= 10")
+        having.append(f"COUNT(DISTINCT {src_g}) = 1")
     elif kind == "spread":
         where.append("i.span_s > 10")
     elif kind == "unknown":
         where.append("i.span_s IS NULL")
     clause = ("WHERE " + " AND ".join(where)) if where else ""
+    hav = ("HAVING " + " AND ".join(having)) if having else ""
     order = "n DESC, spare DESC" if sort == "size" else "spare DESC, g.group_id"
     base = (f"FROM sim.sim_group g JOIN {FILES} f ON f.path = g.path "
-            f"LEFT JOIN sim.sim_info i ON i.group_id = g.group_id {clause} GROUP BY g.group_id")
+            f"LEFT JOIN sim.sim_info i ON i.group_id = g.group_id {clause} GROUP BY g.group_id {hav}")
     shown = db.execute(f"SELECT COUNT(*) FROM (SELECT g.group_id {base})", args).fetchone()[0]
     gids = db.execute(
         f"SELECT g.group_id, COUNT(*) n, SUM(f.size) - SUM(CASE WHEN g.is_best = 1 THEN f.size ELSE 0 END) AS spare "
         f"{base} ORDER BY {order} LIMIT ? OFFSET ?", args + [SIM_PAGE, (page - 1) * SIM_PAGE]).fetchall()
     groups = []
     for g in gids:
-        members = db.execute(
+        rows = db.execute(
             f"SELECT f.id, f.path, f.taken_at, f.size, f.width, f.height, g.is_best, g.is_sharpest, h.sharp "
             f"FROM sim.sim_group g JOIN {FILES} f ON f.path = g.path "
             f"LEFT JOIN sim.hashes h ON h.path = g.path WHERE g.group_id = ? "
             f"ORDER BY g.is_sharpest DESC, g.is_best DESC, f.size DESC", (g["group_id"],)).fetchall()
+        members = []
+        for r in rows:
+            top = r["path"].split("/")[0] if "/" in r["path"] else ""
+            members.append({**dict(r), "src_label": SOURCE_LABELS.get(top, top or "(top level)")})
         info = db.execute("SELECT span_s FROM sim.sim_info WHERE group_id = ?", (g["group_id"],)).fetchone()
+        labels = sorted({m["src_label"] for m in members})
         groups.append({"id": g["group_id"], "spare": g["spare"], "members": members,
-                       "span": info["span_s"] if info else None})
+                       "span": info["span_s"] if info else None,
+                       "sources": labels if len(labels) > 1 else []})
     f = {"kind": kind, "sort": sort, "group": group}
     q = {k: v for k, v in f.items() if v}
     more = page * SIM_PAGE < shown

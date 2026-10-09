@@ -136,7 +136,7 @@ no internet). Start it with `uvicorn app.main:app --port 8090` (commands in the 
 | `/shared` | Old bookmark; redirects to `/?source=apple-shared` |
 | `/photo/{id}` | Large preview, Live Photo video, metadata, identical copies, similar photos, date-fix box |
 | `/dups` | Groups of byte-identical files (same SHA-1 and size), up to 200 groups, largest first |
-| `/similar` | Near-duplicate groups (see below), 20 per page. Parameters: `kind` (`burst`, `spread`, `unknown`), `sort` (`space`, `size`), `group` (a group number), `page` |
+| `/similar` | Near-duplicate groups (see below), 20 per page. Parameters: `kind` (`cross`, `burst`, `spread`, `unknown`), `sort` (`space`, `size`), `group` (a group number), `page` |
 | `/thumb/{id}`, `/preview/{id}` | Cached JPEGs, 360px and 1600px on the long side |
 | `/file/{id}` | The original file, streamed unchanged (used by "Download original") |
 | `POST /photo/{id}/date` | Saves a manual date (see below) |
@@ -215,7 +215,8 @@ not byte-identical. It never changes a photo.
    those).
 5. **Suggestions, never decisions:** each group marks its **Sharpest** photo (best for
    bursts) and its **Largest** (most pixels, then bytes; best for copies). The header says
-   how far apart the camera times are ("within seconds", "over 2 h", "over 3 days") and how
+   which source folders the photos come from when there is more than one, how far apart the
+   camera times are ("within seconds", "over 2 h", "over 3 days") and how
    much space the non-largest photos use. Groups are listed with the most spare space first by default.
 
 Data: `curator_similar.sqlite` (derived, safe to delete and rebuild) with tables `hashes`

@@ -16,7 +16,8 @@ copies). Both are suggestions, not verdicts: you choose.</p>
 <form class="filters" method="get" action="/similar">
   <select name="kind" aria-label="Kind of group" onchange="this.form.submit()">
     <option value="">All groups</option>
-    <option value="burst" {% if f.kind == 'burst' %}selected{% endif %}>Bursts (taken within 10 seconds)</option>
+    <option value="cross" {% if f.kind == 'cross' %}selected{% endif %}>Same photo in several sources (copies)</option>
+    <option value="burst" {% if f.kind == 'burst' %}selected{% endif %}>Bursts (one source, within 10 seconds)</option>
     <option value="spread" {% if f.kind == 'spread' %}selected{% endif %}>Spread over time (likely copies)</option>
     <option value="unknown" {% if f.kind == 'unknown' %}selected{% endif %}>Camera time unknown</option>
   </select>
@@ -30,14 +31,14 @@ copies). Both are suggestions, not verdicts: you choose.</p>
 <p class="muted small">{{ shown }} group{{ '' if shown == 1 else 's' }} shown.</p>
 {% for g in groups %}
 <section class="dupgroup">
-  <h3>Group {{ g.id }}: {{ g.members | length }} photos <span class="muted small">· {{ g.span | span }} · {{ g.spare | human }} in the others</span></h3>
+  <h3>Group {{ g.id }}: {{ g.members | length }} photos <span class="muted small">· {% if g.sources %}in {{ g.sources | join(' + ') }} · {% endif %}{{ g.span | span }} · {{ g.spare | human }} in the others</span></h3>
   <div class="grid small">
     {% for m in g.members %}
     <a class="cell" href="/photo/{{ m.id }}" title="{{ m.path }}">
       <img loading="lazy" src="/thumb/{{ m.id }}" alt="{{ m.path }}">
       {% if m.is_sharpest %}<span class="badge live">SHARPEST</span>{% endif %}
       {% if m.is_best %}<span class="badge big">LARGEST</span>{% endif %}
-      <span class="date">{% if m.width %}{{ m.width }}×{{ m.height }} · {% endif %}{{ m.size | human }}{% if m.sharp is not none %} · sharp {{ m.sharp | round | int }}{% endif %}</span>
+      <span class="date">{{ m.src_label }} · {% if m.width %}{{ m.width }}×{{ m.height }} · {% endif %}{{ m.size | human }}{% if m.sharp is not none %} · sharp {{ m.sharp | round | int }}{% endif %}</span>
     </a>
     {% endfor %}
   </div>
