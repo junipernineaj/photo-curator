@@ -248,8 +248,9 @@ cd ~/photo-curator && git pull
 ```
 
 Run it in tmux for the full archive. Then open the **Similar** page in the browse app.
-Groups are listed with the most space-wasting first; the largest version in each group is
-marked as a suggestion only. A photo's own page also lists its similar photos.
+Groups are listed with the most space-wasting first. Each group shows how far apart the
+photos were taken (seconds apart means a burst), and marks its **Sharpest** frame (best for
+bursts) and its **Largest** version (best for copies). Both are suggestions only. A photo's own page also lists its similar photos.
 
 - Results are in `photo-archive/curator_similar.sqlite`. It is derived data: delete it and
   re-run to rebuild. Re-runs only fingerprint new or changed photos.
@@ -257,7 +258,10 @@ marked as a suggestion only. A photo's own page also lists its similar photos.
   stricter. Bursts of the dogs will group at 5; use 2 or 3 to see only near-identical copies.
 - Misses are expected for heavy crops and rotated copies. Blank or very dark pictures are
   skipped (they would all match each other). Byte-identical files are left to the Duplicates page.
-- Re-run it after each scan.
+- The sharpness score is a simple edge measure on the thumbnail. It separates a blurred frame
+  from a crisp one in the same burst. Don't compare scores across different scenes, and a
+  heavily brightened or noisy copy can score high; for copies, trust Largest.
+- Re-run it after each scan. Photos fingerprinted by an older version are re-scored automatically.
 
 ## Git and GitHub
 

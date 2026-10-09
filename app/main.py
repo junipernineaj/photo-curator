@@ -110,6 +110,19 @@ def human(n):
 
 
 templates.env.filters["human"] = human
+def span_label(s):
+    if s is None:
+        return "camera times unknown"
+    if s <= 10:
+        return "taken within seconds of each other (burst or copies)"
+    if s < 3600:
+        return f"taken over {s // 60 or 1} min"
+    if s < 86400:
+        return f"taken over {s // 3600} h"
+    return f"taken over {s // 86400} days (copies or repeat shots)"
+
+
+templates.env.filters["span"] = span_label
 templates.env.filters["day"] = lambda s: (s or "")[:10]
 
 # A Live Photo's video is shown inside its still, not as a separate tile.
@@ -253,10 +266,13 @@ def similar_page(request: Request, db=Depends(get_db), page: int = 1):
     groups = []
     for g in gids:
         members = db.execute(
-            f"SELECT f.id, f.path, f.taken_at, f.size, f.width, f.height, g.is_best "
-            f"FROM sim.sim_group g JOIN {FILES} f ON f.path = g.path WHERE g.group_id = ? "
-            f"ORDER BY g.is_best DESC, f.size DESC", (g["group_id"],)).fetchall()
-        groups.append({"id": g["group_id"], "spare": g["spare"], "members": members})
+            f"SELECT f.id, f.path, f.taken_at, f.size, f.width, f.height, g.is_best, g.is_sharpest, h.sharp "
+            f"FROM sim.sim_group g JOIN {FILES} f ON f.path = g.path "
+            f"LEFT JOIN sim.hashes h ON h.path = g.path WHERE g.group_id = ? "
+            f"ORDER BY g.is_sharpest DESC, g.is_best DESC, f.size DESC", (g["group_id"],)).fetchall()
+        info = db.execute("SELECT span_s FROM sim.sim_info WHERE group_id = ?", (g["group_id"],)).fetchone()
+        groups.append({"id": g["group_id"], "spare": g["spare"], "members": members,
+                       "span": info["span_s"] if info else None})
     more = page * SIM_PAGE < (tot["gc"] or 0)
     return templates.TemplateResponse(request, "similar.html", {
         "groups": groups, "tot": tot, "built": built[0] if built else None,

@@ -7,20 +7,22 @@
 then reload this page.</p>
 {% else %}
 <p class="muted">Photos that look alike: resized, re-saved or lightly edited copies, RAW and JPEG
-of the same shot, and bursts. This page only lists them; nothing is deleted. The one marked
-<b>Largest</b> is just the biggest version, not a verdict: you choose.</p>
+of the same shot, and bursts. This page only lists them; nothing is deleted. Each group is marked with
+its <b>Sharpest</b> frame (crispest edges, good for bursts) and its <b>Largest</b> version (good for
+copies). Both are suggestions, not verdicts: you choose.</p>
 <p class="count">{{ tot.gc }} groups, {{ tot.n }} photos
   <span class="muted">· about {{ ((tot.s or 0) - (tot.b or 0)) | human }} is taken up by the non-largest copies
   · built {{ built }}, up to {{ thr }} of 64 bits different</span></p>
 {% for g in groups %}
 <section class="dupgroup">
-  <h3>{{ g.members | length }} photos <span class="muted small">· {{ g.spare | human }} in the others</span></h3>
+  <h3>{{ g.members | length }} photos <span class="muted small">· {{ g.span | span }} · {{ g.spare | human }} in the others</span></h3>
   <div class="grid small">
     {% for m in g.members %}
     <a class="cell" href="/photo/{{ m.id }}" title="{{ m.path }}">
       <img loading="lazy" src="/thumb/{{ m.id }}" alt="{{ m.path }}">
-      {% if m.is_best %}<span class="badge live">LARGEST</span>{% endif %}
-      <span class="date">{% if m.width %}{{ m.width }}×{{ m.height }} · {% endif %}{{ m.size | human }}</span>
+      {% if m.is_sharpest %}<span class="badge live">SHARPEST</span>{% endif %}
+      {% if m.is_best %}<span class="badge big">LARGEST</span>{% endif %}
+      <span class="date">{% if m.width %}{{ m.width }}×{{ m.height }} · {% endif %}{{ m.size | human }}{% if m.sharp is not none %} · sharp {{ m.sharp | round | int }}{% endif %}</span>
     </a>
     {% endfor %}
   </div>

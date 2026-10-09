@@ -53,3 +53,4 @@ main{padding:16px;max-width:1500px;margin:0 auto}
 .datefix form{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .datefix .ok{color:#7bc47f;margin:0 0 6px}.datefix .bad{color:#e07a7a;margin:0 0 6px}
 .datefix button.link{background:none;border:0;color:var(--accent);text-decoration:underline;cursor:pointer;padding:0}
+.badge.big{top:auto;left:auto;right:6px;bottom:auto;top:6px;background:#3b6ea5}

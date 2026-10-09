@@ -16,7 +16,7 @@ import sqlite3
 from collections import defaultdict
 from datetime import datetime
 
-from PIL import Image, ImageStat
+from PIL import Image, ImageFilter, ImageStat
 
 SIM_SCHEMA = """
 CREATE TABLE IF NOT EXISTS hashes (
@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS hashes (
   size INTEGER NOT NULL,         -- file size when hashed (to notice changes)
   mtime_ns INTEGER NOT NULL,
   dhash INTEGER,                 -- signed 64-bit; NULL when unusable
+  sharp REAL,                    -- sharpness score of the thumbnail (higher = crisper)
   status TEXT NOT NULL,          -- ok | flat | failed
   hashed_at TEXT NOT NULL
 );
@@ -31,7 +32,12 @@ CREATE TABLE IF NOT EXISTS sim_group (
   group_id INTEGER NOT NULL,
   path TEXT NOT NULL,
   is_best INTEGER NOT NULL DEFAULT 0,   -- suggestion only: the largest version
+  is_sharpest INTEGER NOT NULL DEFAULT 0,   -- suggestion only: the crispest version
   PRIMARY KEY (group_id, path)
+);
+CREATE TABLE IF NOT EXISTS sim_info (
+  group_id INTEGER PRIMARY KEY,
+  span_s INTEGER                 -- seconds between earliest and latest camera time; NULL if unknown
 );
 CREATE INDEX IF NOT EXISTS idx_sim_path ON sim_group(path);
 CREATE TABLE IF NOT EXISTS sim_meta (k TEXT PRIMARY KEY, v TEXT);
@@ -41,25 +47,37 @@ CREATE TABLE IF NOT EXISTS sim_meta (k TEXT PRIMARY KEY, v TEXT);
 def init_sim(path):
     con = sqlite3.connect(path)
     con.executescript(SIM_SCHEMA)
+    # Upgrade files made by the first version of this tool.
+    for table, col, ddl in (("hashes", "sharp", "REAL"),
+                            ("sim_group", "is_sharpest", "INTEGER NOT NULL DEFAULT 0")):
+        have = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
+        if col not in have:
+            con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
     con.commit()
     con.close()
 
 
-def dhash_image(jpeg_path):
-    """Return (status, signed 64-bit hash or None) for a thumbnail file."""
+_LAPLACE = ImageFilter.Kernel((3, 3), [0, 1, 0, 1, -4, 1, 0, 1, 0], scale=1, offset=128)
+
+
+def analyse_image(jpeg_path):
+    """Return (status, signed 64-bit hash or None, sharpness or None) for a thumbnail."""
     try:
         with Image.open(jpeg_path) as im:
-            g = im.convert("L").resize((9, 8), Image.LANCZOS)
+            full = im.convert("L")
+            g = full.resize((9, 8), Image.LANCZOS)
+            # Sharpness: spread of the Laplacian (edge response). Blurred shots score low.
+            sharp = ImageStat.Stat(full.filter(_LAPLACE)).var[0]
     except Exception:
-        return "failed", None
+        return "failed", None, None
     if ImageStat.Stat(g).stddev[0] < 4:        # blank/flat picture: every hash looks alike
-        return "flat", None
+        return "flat", None, sharp
     px = list(g.getdata())
     h = 0
     for row in range(8):
         for col in range(8):
             h = (h << 1) | (1 if px[row * 9 + col] > px[row * 9 + col + 1] else 0)
-    return "ok", h - (1 << 64) if h >= (1 << 63) else h
+    return "ok", (h - (1 << 64) if h >= (1 << 63) else h), sharp
 
 
 def _u(h):
@@ -122,14 +140,28 @@ def group_hashes(items, threshold=5, spread=3, max_bucket=400):
     return groups, skipped
 
 
+def _span_seconds(meta, paths):
+    """Seconds between the earliest and latest CAMERA time in the group, else None."""
+    times = []
+    for p in paths:
+        if meta[p]["date_source"] == "exif" and meta[p]["taken_at"]:
+            try:
+                times.append(datetime.fromisoformat(meta[p]["taken_at"]))
+            except ValueError:
+                pass
+    if len(times) < 2:
+        return None
+    return int((max(times) - min(times)).total_seconds())
+
+
 def _worker(args):
     from . import thumbs
     fid, abs_path, ext, thumbs_dir = args
     out = thumbs.get_or_make(thumbs_dir, fid, abs_path, ext, False, "thumb")
     if not out:
-        return fid, "failed", None
-    status, h = dhash_image(out)
-    return fid, status, h
+        return fid, "failed", None, None
+    status, h, sharp = analyse_image(out)
+    return fid, status, h, sharp
 
 
 def run(archive, db_path, thumbs_dir, sim_path, threshold=5, workers=2, limit=0, log=print):
@@ -139,11 +171,16 @@ def run(archive, db_path, thumbs_dir, sim_path, threshold=5, workers=2, limit=0,
     main = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     main.row_factory = sqlite3.Row
     # Photos only; a Live Photo's video is not compared.
-    rows = main.execute("SELECT id, path, ext, size, mtime_ns, sha1, width, height FROM files "
+    rows = main.execute("SELECT id, path, ext, size, mtime_ns, sha1, width, height, taken_at, date_source "
+                        "FROM files "
                         "WHERE kind = 'photo' ORDER BY id").fetchall()
     sim = sqlite3.connect(sim_path)
     have = {r[0]: (r[1], r[2]) for r in sim.execute("SELECT path, size, mtime_ns FROM hashes")}
-    todo = [r for r in rows if have.get(r["path"]) != (r["size"], r["mtime_ns"])]
+    # Also redo photos fingerprinted before sharpness existed (cheap: thumbnails are cached).
+    no_sharp = {r[0] for r in sim.execute(
+        "SELECT path FROM hashes WHERE status = 'ok' AND sharp IS NULL")}
+    todo = [r for r in rows
+            if have.get(r["path"]) != (r["size"], r["mtime_ns"]) or r["path"] in no_sharp]
     if limit:
         todo = todo[:limit]
     log(f"{len(rows)} photos in the index, {len(todo)} to fingerprint")
@@ -152,10 +189,11 @@ def run(archive, db_path, thumbs_dir, sim_path, threshold=5, workers=2, limit=0,
     now = datetime.now().isoformat(timespec="seconds")
     done = 0
     with Pool(max(1, workers)) as pool:
-        for fid, status, h in pool.imap_unordered(_worker, jobs, chunksize=16):
+        for fid, status, h, sharp in pool.imap_unordered(_worker, jobs, chunksize=16):
             r = by_id[fid]
-            sim.execute("INSERT OR REPLACE INTO hashes VALUES (?,?,?,?,?,?)",
-                        (r["path"], r["size"], r["mtime_ns"], h, status, now))
+            sim.execute("INSERT OR REPLACE INTO hashes(path, size, mtime_ns, dhash, sharp, status, hashed_at) "
+                        "VALUES (?,?,?,?,?,?,?)",
+                        (r["path"], r["size"], r["mtime_ns"], h, sharp, status, now))
             done += 1
             if done % 500 == 0:
                 sim.commit()
@@ -171,15 +209,21 @@ def run(archive, db_path, thumbs_dir, sim_path, threshold=5, workers=2, limit=0,
     groups, skipped = group_hashes(items, threshold=threshold)
     meta = {r["path"]: r for r in rows}
     kept = 0
+    sharp_of = {p: s_ for p, s_ in sim.execute("SELECT path, sharp FROM hashes")}
     sim.execute("DELETE FROM sim_group")
+    sim.execute("DELETE FROM sim_info")
     for gid, paths in enumerate(groups, 1):
         shas = {meta[p]["sha1"] for p in paths}
         if len(shas) == 1 and None not in shas:
             continue                      # byte-identical: already on the Duplicates page
         best = max(paths, key=lambda p: ((meta[p]["width"] or 0) * (meta[p]["height"] or 0),
                                          meta[p]["size"]))
+        sharpest = max(paths, key=lambda p: (sharp_of.get(p) or -1,
+                                             (meta[p]["width"] or 0) * (meta[p]["height"] or 0)))
         for p in paths:
-            sim.execute("INSERT INTO sim_group VALUES (?,?,?)", (gid, p, 1 if p == best else 0))
+            sim.execute("INSERT INTO sim_group(group_id, path, is_best, is_sharpest) VALUES (?,?,?,?)",
+                        (gid, p, 1 if p == best else 0, 1 if p == sharpest else 0))
+        sim.execute("INSERT INTO sim_info VALUES (?,?)", (gid, _span_seconds(meta, paths)))
         kept += 1
     sim.execute("INSERT OR REPLACE INTO sim_meta VALUES ('built_at', ?)", (now,))
     sim.execute("INSERT OR REPLACE INTO sim_meta VALUES ('threshold', ?)", (str(threshold),))
