@@ -105,6 +105,12 @@ review, quality scoring and Qwen captions. Every removal needs a human decision.
 Ollama on junipernine2 (RTX 4070, 12GB) with a Qwen vision model, sharing the GPU
 with Immich's machine learning service.
 
+## Dependencies
+
+The full, current list of what must be installed on each machine is in
+[RUNBOOK.md](RUNBOOK.md#dependencies). Keep it in one place; update it whenever a
+new tool is added.
+
 ## Principles
 
 - Copy only; originals are read-only; nothing is deleted without a human decision.

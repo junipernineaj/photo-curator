@@ -3,19 +3,37 @@
 Commands, settings and fixes for running photo-curator. See
 [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit together.
 
-## Dependencies on junipernine2
+## Dependencies
 
-| Needed | Why | Notes |
-|---|---|---|
-| `git` | Pull this repo | Same credentials as recipe-app |
-| Python 3 + `python3-venv` | Run icloudpd in an isolated environment | `sudo apt install -y python3-venv` if `venv` fails |
-| `icloudpd` (PyPI package, in a venv) | Download from iCloud Photos | Installed in `~/venvs/icloudpd`; a standalone executable is also published on the project's GitHub releases page |
-| `tmux` | Keep the long download running if SSH drops | |
-| `exiftool` (`libimage-exiftool-perl`) | Read dates, sizes and camera info for the scan | `sudo apt install libimage-exiftool-perl` |
-| Free disk | Library is roughly 30GB | Juniper13 has 2TB+ free |
+The single list of everything that must be installed. Add to it whenever a new
+tool is needed, and tick off what is installed.
 
-Later phases will add `ffmpeg`, OpenCV, `pillow-heif`, `imagehash`, Immich,
-PostgreSQL and Ollama. These are not needed yet.
+### On junipernine2 (Ubuntu server)
+
+| Needed | Why | How | Installed |
+|---|---|---|---|
+| `git` | Pull this repo | Same credentials as recipe-app | yes |
+| Python 3 + `python3-venv` | Run icloudpd in an isolated environment; run `scan_archive.py` (standard library only) | `sudo apt install -y python3-venv` if `venv` fails | yes |
+| `icloudpd` | Download from iCloud Photos | PyPI package in `~/venvs/icloudpd` (a standalone executable is also on the project's GitHub releases page) | yes |
+| `tmux` | Keep long jobs running if SSH drops | `sudo apt install -y tmux` | yes (used for the wait loop) |
+| `exiftool` | Read dates, sizes, camera info and Live Photo IDs in the scan | `sudo apt install -y libimage-exiftool-perl` | yes |
+| `sqlite3` (command line) | Inspect the index by hand; optional | `sudo apt install -y sqlite3` | check |
+| Free disk | Photo archive | `/media/aj9/Juniper13` has 2TB+ free | yes |
+
+### On the Mac (Sonoma, Intel)
+
+| Needed | Why | How | Installed |
+|---|---|---|---|
+| Python 3 (3.11) | Run osxphotos | The system `pip` is broken (points at a missing Python); always use a venv | yes |
+| `osxphotos` | Export originals, dates and metadata from old `.photoslibrary` packages | `python3 -m venv ~/venvs/osxphotos && ~/venvs/osxphotos/bin/pip install osxphotos`; put `~/venvs/osxphotos/bin` on PATH | yes (0.77.2) |
+| `rsync` | Copy files to the server | Built in (old 2.6.9; works). Use `--partial` with two dashes | yes |
+| ssh access to the server | rsync and `mkdir` on the server | Existing login to `aj9@junipernine2` | yes |
+
+### Planned (not needed yet)
+
+`ffmpeg`, OpenCV, `pillow-heif`, `imagehash` (frame picker, thumbnails, near-duplicates);
+FastAPI, Uvicorn, Jinja2 and HTMX (browse page); Immich with PostgreSQL + pgvector;
+Ollama with a Qwen vision model; Cloudflare Tunnel + Access.
 
 ## Apple Photos: required settings
 
