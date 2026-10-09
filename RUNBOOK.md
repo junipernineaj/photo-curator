@@ -234,6 +234,31 @@ Notes:
   on the next load.
 - htmx is vendored in `app/static/` so the page works with no internet.
 
+## Find near-duplicates
+
+`scripts/find_similar.py` finds photos that look alike but are not byte-identical: resized
+or re-saved copies, lightly edited versions, a RAW and its JPEG, and burst shots. It is
+read-only on the photos. It makes a 64-bit "fingerprint" of each photo's thumbnail (so it
+also creates every thumbnail, which is slow the first time) and groups close fingerprints.
+
+```
+cd ~/photo-curator && git pull
+~/venvs/curator/bin/python scripts/find_similar.py --limit 300     # small trial first
+~/venvs/curator/bin/python scripts/find_similar.py                 # then everything (resumable)
+```
+
+Run it in tmux for the full archive. Then open the **Similar** page in the browse app.
+Groups are listed with the most space-wasting first; the largest version in each group is
+marked as a suggestion only. A photo's own page also lists its similar photos.
+
+- Results are in `photo-archive/curator_similar.sqlite`. It is derived data: delete it and
+  re-run to rebuild. Re-runs only fingerprint new or changed photos.
+- `--threshold N` (0 to 7, default 5) is how many of the 64 bits may differ. Lower is
+  stricter. Bursts of the dogs will group at 5; use 2 or 3 to see only near-identical copies.
+- Misses are expected for heavy crops and rotated copies. Blank or very dark pictures are
+  skipped (they would all match each other). Byte-identical files are left to the Duplicates page.
+- Re-run it after each scan.
+
 ## Git and GitHub
 
 - Claude commits as `Claude <noreply@anthropic.com>`. The repo is public; never commit photos, `.env`, the cookie folder or tokens (the `.gitignore` covers photos, databases and `.env`).

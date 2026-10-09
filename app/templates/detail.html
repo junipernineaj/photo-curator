@@ -46,6 +46,12 @@
       {% if has_override %}<button name="action" value="clear" class="link">Undo my date for this photo</button>{% endif %}
     </form>
   </div>
+  {% if similar_to %}
+  <div class="twins">
+    <h3>Similar photos ({{ similar_to | length }})</h3>
+    <ul>{% for t in similar_to %}<li><a href="/photo/{{ t.id }}">{{ t.path }}</a></li>{% endfor %}</ul>
+  </div>
+  {% endif %}
   {% if twins %}
   <div class="twins">
     <h3>Identical copies ({{ twins | length }})</h3>

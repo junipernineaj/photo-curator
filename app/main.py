@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import thumbs
+from . import similar, thumbs
 
 HERE = Path(__file__).parent
 ARCHIVE = os.path.realpath(os.environ.get(
@@ -28,6 +28,8 @@ DB = os.environ.get("DB", os.path.join(os.path.dirname(ARCHIVE), "curator.sqlite
 THUMBS = os.environ.get("THUMBS", os.path.join(os.path.dirname(ARCHIVE), "thumbs"))
 # Your manual corrections live in their own file so a re-scan can never overwrite them.
 EDITS = os.environ.get("EDITS", os.path.join(os.path.dirname(ARCHIVE), "curator_edits.sqlite"))
+# Near-duplicate groups (derived data from scripts/find_similar.py; safe to delete and rebuild).
+SIM = os.environ.get("SIM", os.path.join(os.path.dirname(ARCHIVE), "curator_similar.sqlite"))
 PAGE_SIZE = 96
 
 EDITS_SCHEMA = """
@@ -73,7 +75,9 @@ def get_db():
     con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, check_same_thread=False)
     con.row_factory = sqlite3.Row
     init_edits()
+    similar.init_sim(SIM)
     con.execute("ATTACH DATABASE ? AS ed", (f"file:{EDITS}?mode=ro",))
+    con.execute("ATTACH DATABASE ? AS sim", (f"file:{SIM}?mode=ro",))
     try:
         yield con
     finally:
@@ -173,9 +177,13 @@ def detail(request: Request, fid: int, db=Depends(get_db)):
     n_all = len(folder_targets(db, row, False))
     has_override = db.execute("SELECT 1 FROM ed.date_override WHERE path = ?",
                               (row["path"],)).fetchone() is not None
+    similar_to = db.execute(
+        f"SELECT f.id, f.path FROM sim.sim_group a JOIN sim.sim_group b ON a.group_id = b.group_id "
+        f"JOIN {FILES} f ON f.path = b.path WHERE a.path = ? AND b.path != ?",
+        (row["path"], row["path"])).fetchall()
     done = request.query_params.get("done", "")
     return templates.TemplateResponse(request, "detail.html", {
-        "r": row, "live_video": live_video, "twins": twins, "folder": folder,
+        "r": row, "live_video": live_video, "twins": twins, "similar_to": similar_to, "folder": folder,
         "n_guess": n_guess, "n_all": n_all, "has_override": has_override,
         "done": done if done.isdigit() else "", "err": request.query_params.get("err", "")[:80]})
 
@@ -225,6 +233,36 @@ def dups(request: Request, db=Depends(get_db)):
                              "ORDER BY path", (g["sha1"], g["size"])).fetchall()
         out.append({"size": g["size"], "members": members})
     return templates.TemplateResponse(request, "dups.html", {"groups": out})
+
+
+SIM_PAGE = 20
+
+
+@app.get("/similar", response_class=HTMLResponse)
+def similar_page(request: Request, db=Depends(get_db), page: int = 1):
+    page = max(page, 1)
+    built = db.execute("SELECT v FROM sim.sim_meta WHERE k = 'built_at'").fetchone()
+    thr = db.execute("SELECT v FROM sim.sim_meta WHERE k = 'threshold'").fetchone()
+    tot = db.execute(
+        f"SELECT COUNT(*) n, SUM(f.size) s, SUM(CASE WHEN g.is_best = 1 THEN f.size ELSE 0 END) b, "
+        f"COUNT(DISTINCT g.group_id) gc FROM sim.sim_group g JOIN {FILES} f ON f.path = g.path").fetchone()
+    gids = db.execute(
+        f"SELECT g.group_id, SUM(f.size) - SUM(CASE WHEN g.is_best = 1 THEN f.size ELSE 0 END) AS spare "
+        f"FROM sim.sim_group g JOIN {FILES} f ON f.path = g.path GROUP BY g.group_id "
+        f"ORDER BY spare DESC, g.group_id LIMIT ? OFFSET ?", (SIM_PAGE, (page - 1) * SIM_PAGE)).fetchall()
+    groups = []
+    for g in gids:
+        members = db.execute(
+            f"SELECT f.id, f.path, f.taken_at, f.size, f.width, f.height, g.is_best "
+            f"FROM sim.sim_group g JOIN {FILES} f ON f.path = g.path WHERE g.group_id = ? "
+            f"ORDER BY g.is_best DESC, f.size DESC", (g["group_id"],)).fetchall()
+        groups.append({"id": g["group_id"], "spare": g["spare"], "members": members})
+    more = page * SIM_PAGE < (tot["gc"] or 0)
+    return templates.TemplateResponse(request, "similar.html", {
+        "groups": groups, "tot": tot, "built": built[0] if built else None,
+        "thr": thr[0] if thr else None, "page": page,
+        "next_url": f"/similar?page={page + 1}" if more else None,
+        "prev_url": f"/similar?page={page - 1}" if page > 1 else None})
 
 
 # ---- manual date corrections (written to the separate edits file, never to photos) ----
