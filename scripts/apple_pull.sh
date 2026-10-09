@@ -42,12 +42,15 @@ case "${1:-}" in
       echo "[$(date +%H:%M:%S)] attempt $i of 24"
       # show status lines only (hide the raw JSON debug dump); full output kept in $LOG
       icloudpd "${COMMON[@]}" --recent 20 2>&1 | tee "$LOG" | grep --line-buffered -vE '^[[:space:]]|^[{}]|DEBUG' || true
-      # real errors only: ERROR log lines, failed auth, or an explicit lock message
-      if grep -qE '^[0-9-]+ [0-9:]+ +ERROR|AUTHENTICATION_FAILED|locked for security' "$LOG"; then
+      # 1) still indexing (logged as INFO or ERROR depending on the attempt): keep waiting
+      if grep -q "not finished indexing" "$LOG"; then
+        :
+      # 2) any other real error: stop
+      elif grep -qE '^[0-9-]+ [0-9:]+ +ERROR|AUTHENTICATION_FAILED|locked for security' "$LOG"; then
         echo "An error (not just indexing) occurred - stopping. Read the output above."
         rm -f "$LOG"; exit 1
-      fi
-      if ! grep -q "not finished indexing" "$LOG"; then
+      # 3) neither: the trial ran
+      else
         echo "No indexing message and no errors - check the output above, then run: $0 full"
         rm -f "$LOG"; exit 0
       fi

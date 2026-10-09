@@ -88,7 +88,7 @@ even after the first succeeds. We hit these in order on 9 Oct 2026.
 |---|---|---|
 | `KeyringLocked: Failed to unlock the collection` | The server has no desktop keyring, and icloudpd tried to fetch the password from it | Use console providers: `--password-provider console --mfa-provider console` (the script now does this) |
 | `Apple iCloud setup is not complete. Please log into https://icloud.com/ ...` and the reply showed an updated-terms flag and no services | Apple had an updated iCloud terms notice waiting, and it withholds the Photos service until it's accepted in a browser | Log in at icloud.com, accept the terms, open Photos once, then re-run |
-| `Apple iCloud Photo Library has not finished indexing yet` | Apple builds a web-access index of the library the first time something other than the Photos app asks for it; with a library of this size it takes a while | Wait and retry (see below) |
+| `Apple iCloud Photo Library has not finished indexing yet` (sometimes logged as `ERROR library exception ...` followed by `Unknown library: PrimarySync`; same cause) | Apple builds a web-access index of the library the first time something other than the Photos app asks for it; with a library of this size it takes a while | Wait and retry (see below) |
 
 ### About the indexing wait
 
