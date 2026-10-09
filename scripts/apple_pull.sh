@@ -9,6 +9,7 @@
 #   scripts/apple_pull.sh wait            # retry the trial every 20 min until Apple's
 #                                         # library indexing finishes (max 24 tries)
 #
+# If a password or 2FA prompt is needed, run `auth` first (prompts can be hidden in wait mode).
 # Needs ICLOUD_USER (your Apple ID email). Run `full` inside tmux.
 
 set -euo pipefail
@@ -39,8 +40,10 @@ case "${1:-}" in
     LOG="$(mktemp)"
     for i in $(seq 1 24); do
       echo "[$(date +%H:%M:%S)] attempt $i of 24"
-      icloudpd "${COMMON[@]}" --recent 20 2>&1 | tee "$LOG" | tail -n 15
-      if grep -qE "ERROR|serviceErrors|locked|AUTHENTICATION_FAILED" "$LOG"; then
+      # show status lines only (hide the raw JSON debug dump); full output kept in $LOG
+      icloudpd "${COMMON[@]}" --recent 20 2>&1 | tee "$LOG" | grep --line-buffered -vE '^[[:space:]]|^[{}]|DEBUG' || true
+      # real errors only: ERROR log lines, failed auth, or an explicit lock message
+      if grep -qE '^[0-9-]+ [0-9:]+ +ERROR|AUTHENTICATION_FAILED|locked for security' "$LOG"; then
         echo "An error (not just indexing) occurred - stopping. Read the output above."
         rm -f "$LOG"; exit 1
       fi
