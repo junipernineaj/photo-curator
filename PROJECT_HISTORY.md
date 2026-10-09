@@ -118,3 +118,53 @@ That means your choice is really about storage, and you have a few options:
 - **Leave it on and let the server take the strain.** Once photos are archived on junipernine2, which has the space, you can remove them from the phone and iCloud. Your curator could also drop the MOV from anything that isn't a keeper, or where you've accepted the still.
 - **Toggle it per situation.** Live on for the dogs and your wife, off for landscapes, food and documents. Turn on Settings → Camera → Preserve Settings → Live Photo so the camera remembers your last choice rather than resetting to on.
 - **Use burst mode for the fastest moments.** Hold the shutter and drag left,
+
+---
+
+# Summary of actions to date (added 2026-10-09)
+
+The 3 October entries above cover the original discussion: whether the project is viable, how Live Photos work, Immich vs building from scratch, and Docker vs a native install. The log below covers 9 October, when the project started.
+
+## What we decided
+
+- Immich stores and presents the photos; photo-curator (FastAPI + SQLite + HTMX, like recipe-app) does the tidying.
+- Keep Live Photo switched on. The still is always full quality; the 3-second video is only a backup source of frames.
+- Copy only: nothing is deleted from iCloud, Google or the server until the archive is verified.
+- Originals live outside the repo at `/media/aj9/Juniper13/photo-archive/`, replacing the earlier `/data/photos-staging` idea.
+
+## Timeline
+
+| Time (9 Oct) | Action | Outcome |
+|---|---|---|
+| 08:41 | Wrote `SPEC.md`, `README.md`, `.gitignore`; first local commit | Done |
+| 08:46 | Agreed the working model: repo on GitHub, cloned on junipernine2, Claude commits, Tony pulls | Done |
+| 08:58 | Tried to attach the GitHub repo to the session | Blocked: GitHub not linked to this session |
+| 09:03 to 09:12 | Worked out why the GitHub connection prompted for onboarding | Cause: the connect link opened in a Chrome profile signed in to the wrong Claude account. Fixed by signing in to the right account |
+| 09:12 | Attached `junipernineaj/photo-curator` | Read worked; push refused (app lacked write access). The repo also had a starter README and `.gitignore`, so the local commit was rebased on top |
+| 09:14 | Pushed the spec after the Claude GitHub App was given write access | Done |
+| 09:16 | Chose to start by pulling all photos from Apple and Google | Apple first |
+| 09:22 | Confirmed the photos are in iCloud (about 30GB of the 43.85GB used); advanced data protection off; Juniper13 has 2TB+ free | Route: `icloudpd` on junipernine2 |
+| 09:25 | Added `docs/INGEST.md` and `scripts/apple_pull.sh` (auth, trial, full) | Pushed |
+| 09:29 | Installed `icloudpd` in a Python venv on junipernine2 | Done |
+| 09:35 | First `auth` failed: no desktop keyring on the server | Fixed by using console password and 2FA prompts; script updated and pushed |
+| 09:38 | `auth` succeeded with password and 2FA code | Session saved |
+| 09:39 | `trial` stopped: Apple said iCloud setup was not complete (an updated-terms flag was set) | Fix: log in at icloud.com, accept the terms, open Photos |
+| 09:43 | `trial` reached the library, then reported it had not finished indexing | Waiting on Apple; retry in 15 to 30 minutes |
+| 09:46 to 09:55 | Committed `PROJECT_HISTORY.md`; wrote `ARCHITECTURE.md` and `RUNBOOK.md` | Pushed |
+
+## Challenges overcome
+
+1. **GitHub link prompting as if new:** wrong browser profile. Signed in to the right account.
+2. **Push refused:** the Claude GitHub App needed read and write on the repo.
+3. **Repo not empty:** GitHub added a README and `.gitignore`; rebased around them.
+4. **Keyring error on a headless server:** use console password and MFA providers.
+5. **iCloud "setup not complete":** accept the updated terms at icloud.com.
+
+## Still open
+
+- First successful `trial` download and Live Photo pairing check (blocked on indexing).
+- Full Apple pull and count verification.
+- Google Takeout request and download.
+- Immich install, then the curator app and Qwen tagging.
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) and [RUNBOOK.md](RUNBOOK.md) for how it works and how to run it.
