@@ -329,6 +329,11 @@ number (`/similar?group=192`).
   from a crisp one in the same burst. Don't compare scores across different scenes, and a
   heavily brightened or noisy copy can score high; for copies, trust Largest.
 - Re-run it after each scan. Photos fingerprinted by an older version are re-scored automatically.
+- A photo that cannot be read gets status `failed` and a `.fail` marker beside its thumbnail
+  (so the browse app does not retry it on every page load). If you fix the cause, delete the
+  markers (`find photo-archive/thumbs -name '*.fail' -delete`; they are cache only) and re-run
+  `find_similar.py`, which retries failed photos. Photos missing a few bytes at the end (9 Oct:
+  92 Pixel burst covers, 37 bytes short) are now read anyway.
 
 ## Bringing in an old photo folder, and retiring it
 

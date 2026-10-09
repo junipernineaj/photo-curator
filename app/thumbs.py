@@ -8,7 +8,11 @@ import os
 import subprocess
 import tempfile
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageFile, ImageOps
+
+# Some cameras and exports (Pixel burst covers, for one) leave a JPEG a few bytes short.
+# The picture is complete for all practical purposes, so make a thumbnail from what is there.
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 try:  # HEIC/HEIF support is optional but needed for iPhone photos
     import pillow_heif

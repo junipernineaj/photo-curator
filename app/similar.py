@@ -179,8 +179,12 @@ def run(archive, db_path, thumbs_dir, sim_path, threshold=5, workers=2, limit=0,
     # Also redo photos fingerprinted before sharpness existed (cheap: thumbnails are cached).
     no_sharp = {r[0] for r in sim.execute(
         "SELECT path FROM hashes WHERE status = 'ok' AND sharp IS NULL")}
+    # Retry earlier failures too: the cause may have been fixed (the thumbnail step leaves a
+    # ".fail" marker, so a file that still cannot be read is skipped quickly).
+    failed = {r[0] for r in sim.execute("SELECT path FROM hashes WHERE status = 'failed'")}
     todo = [r for r in rows
-            if have.get(r["path"]) != (r["size"], r["mtime_ns"]) or r["path"] in no_sharp]
+            if have.get(r["path"]) != (r["size"], r["mtime_ns"]) or r["path"] in no_sharp
+            or r["path"] in failed]
     if limit:
         todo = todo[:limit]
     log(f"{len(rows)} photos in the index, {len(todo)} to fingerprint")
