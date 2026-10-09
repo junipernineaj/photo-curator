@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+<form class="filters" hx-get="/" hx-target="#results" hx-select="#results" hx-swap="outerHTML"
+      hx-push-url="true" hx-trigger="change, keyup changed delay:400ms from:#q">
+  <select name="year" aria-label="Year">
+    <option value="">All years</option>
+    {% for y in years %}{% if y.y %}
+    <option value="{{ y.y }}" {% if f.year == y.y %}selected{% endif %}>{{ y.y }} ({{ y.n }})</option>
+    {% endif %}{% endfor %}
+  </select>
+  <select name="kind" aria-label="Type">
+    <option value="">Photos and videos</option>
+    <option value="photo" {% if f.kind == 'photo' %}selected{% endif %}>Photos</option>
+    <option value="video" {% if f.kind == 'video' %}selected{% endif %}>Videos</option>
+  </select>
+  <select name="src" aria-label="Date source">
+    <option value="">Any date source</option>
+    <option value="exif" {% if f.src == 'exif' %}selected{% endif %}>Date from camera</option>
+    <option value="folder" {% if f.src == 'folder' %}selected{% endif %}>Date from folder name</option>
+    <option value="mtime" {% if f.src == 'mtime' %}selected{% endif %}>Date from file (least reliable)</option>
+  </select>
+  <select name="sort" aria-label="Sort">
+    <option value="new" {% if f.sort != 'old' %}selected{% endif %}>Newest first</option>
+    <option value="old" {% if f.sort == 'old' %}selected{% endif %}>Oldest first</option>
+  </select>
+  <label class="check"><input type="checkbox" name="live" value="1" {% if f.live == '1' %}checked{% endif %}> Live Photos only</label>
+  <input id="q" type="search" name="q" value="{{ f.q }}" placeholder="Search folder or file name">
+</form>
+
+<section id="results">
+  <p class="count">{{ "{:,}".format(total) }} shown
+    <span class="muted">of {{ "{:,}".format(grand[0]) }} items, {{ grand[1] | human }}</span></p>
+  <div id="grid" class="grid">
+    {% for r in rows %}
+    <a class="cell" href="/photo/{{ r.id }}" title="{{ r.path }}">
+      <img loading="lazy" src="/thumb/{{ r.id }}" alt="{{ r.path }}">
+      {% if r.kind == 'video' %}<span class="badge">VIDEO</span>
+      {% elif r.pair_key %}<span class="badge live">LIVE</span>{% endif %}
+      <span class="date">{{ r.taken_at | day }}</span>
+    </a>
+    {% else %}
+    <p class="empty">Nothing matches those filters.</p>
+    {% endfor %}
+    {% if more_url %}
+    <button class="more" hx-get="{{ more_url }}" hx-select="#grid > *" hx-target="this"
+            hx-swap="outerHTML">Load more</button>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

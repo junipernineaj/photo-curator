@@ -30,6 +30,7 @@ tidying. Nothing is deleted automatically, and no photo leaves the house.
 | Apple ingest: `scripts/apple_pull.sh` using `icloudpd` | Written; authentication done; first download waiting on Apple's library indexing |
 | Old folder + Photos library export (`osxphotos` on the Mac) | Done: copied to `originals/` on the server |
 | Archive scanner: `scripts/scan_archive.py` into `curator.sqlite` | Written and tested on sample data; not yet run on the real archive |
+| Browse app (`app/`): grid, filters, detail with Live video, duplicates page, cached thumbnails | Written and tested on sample data; not yet run on the real archive |
 | Google Takeout ingest | Requested 9 Oct; waiting for Google |
 | Immich on junipernine2 | Not started |
 | Curator app (Live frame picker, duplicates, scoring) | Not started |

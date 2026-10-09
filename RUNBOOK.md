@@ -17,6 +17,8 @@ tool is needed, and tick off what is installed.
 | `icloudpd` | Download from iCloud Photos | PyPI package in `~/venvs/icloudpd` (a standalone executable is also on the project's GitHub releases page) | yes |
 | `tmux` | Keep long jobs running if SSH drops | `sudo apt install -y tmux` | yes (used for the wait loop) |
 | `exiftool` | Read dates, sizes, camera info and Live Photo IDs in the scan | `sudo apt install -y libimage-exiftool-perl` | yes |
+| `ffmpeg` | Video thumbnails in the browse app | `sudo apt install -y ffmpeg` | install |
+| Browse-app Python packages (FastAPI, Uvicorn, Jinja2, Pillow, pillow-heif) | The browse page | venv `~/venvs/curator`; `pip install -r requirements.txt` | install |
 | `sqlite3` (command line) | Inspect the index by hand; optional | `sudo apt install -y sqlite3` | check |
 | Free disk | Photo archive | `/media/aj9/Juniper13` has 2TB+ free | yes |
 
@@ -31,8 +33,7 @@ tool is needed, and tick off what is installed.
 
 ### Planned (not needed yet)
 
-`ffmpeg`, OpenCV, `pillow-heif`, `imagehash` (frame picker, thumbnails, near-duplicates);
-FastAPI, Uvicorn, Jinja2 and HTMX (browse page); Immich with PostgreSQL + pgvector;
+OpenCV and `imagehash` (frame picker, blur scores, near-duplicates); Immich with PostgreSQL + pgvector;
 Ollama with a Qwen vision model; Cloudflare Tunnel + Access.
 
 ## Apple Photos: required settings
@@ -185,6 +186,42 @@ rsync -avh --partial --progress ~/photo-export/copy/ aj9@junipernine2:/media/aj9
 ```
 
 `-n` makes any rsync a dry run. Use `--partial` with two dashes.
+
+## Run the browse app
+
+A read-only web page over the scan index: a thumbnail grid you can filter by year, type
+and date source, a detail page with the full-size preview and (for Live Photos) the
+video, and an exact-duplicates page. It never changes a photo; it only writes cached
+thumbnails to `photo-archive/thumbs/`.
+
+```
+# one-off setup on junipernine2
+sudo apt install -y ffmpeg                          # video thumbnails
+python3 -m venv ~/venvs/curator
+~/venvs/curator/bin/pip install -r ~/photo-curator/requirements.txt
+
+# run (inside tmux so it keeps running)
+cd ~/photo-curator
+~/venvs/curator/bin/uvicorn app.main:app --host 0.0.0.0 --port 8090
+```
+
+Then open `http://192.168.1.40:8090` from the Mac. `--host 0.0.0.0` makes it reachable
+by anything on your home network and **there is no login yet**; use `--host 127.0.0.1`
+to keep it to the server itself. Cloudflare Access goes in front before it is exposed
+outside the house.
+
+Settings (environment variables, all optional): `ARCHIVE` (originals folder), `DB`
+(index file), `THUMBS` (cache folder). Defaults match the layout above.
+
+Notes:
+
+- Thumbnails are made the first time you look at them and cached, so the first scroll
+  through a year is slower than the second. RAW (CR2) files use the preview image
+  embedded in the file (needs `exiftool`); videos use one frame via `ffmpeg`.
+- If the scan has not been run, the page says so (HTTP 503).
+- Re-run `scripts/scan_archive.py` after adding photos; the page reads the new index
+  on the next load.
+- htmx is vendored in `app/static/` so the page works with no internet.
 
 ## Git and GitHub
 

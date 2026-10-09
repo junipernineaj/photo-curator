@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}{{ r.path }} · Photo Curator{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="javascript:history.back()">&larr; Back</a></p>
+<div class="detail">
+  <div class="viewer">
+    {% if r.kind == 'video' %}
+      <video controls preload="metadata" poster="/preview/{{ r.id }}" src="/file/{{ r.id }}"></video>
+    {% else %}
+      <img id="still" src="/preview/{{ r.id }}" alt="{{ r.path }}">
+      {% if live_video %}
+      <video id="livevid" controls loop muted playsinline preload="none"
+             poster="/preview/{{ r.id }}" src="/file/{{ live_video.id }}"></video>
+      <p class="muted small">Live Photo: the short video is the original .MOV. Some browsers
+        (Chrome, Firefox) cannot play iPhone video; Safari can.
+        <a href="/file/{{ live_video.id }}" download>Download the video</a></p>
+      {% endif %}
+    {% endif %}
+  </div>
+  <dl class="meta">
+    <dt>File</dt><dd class="path">{{ r.path }}</dd>
+    <dt>Taken</dt><dd>{{ r.taken_at or "unknown" }}
+      <span class="muted">({{ {'exif':'from the camera','folder':'guessed from folder name','mtime':'from file date, least reliable'}.get(r.date_source, 'unknown') }})</span></dd>
+    <dt>Size</dt><dd>{{ r.size | human }}{% if r.width %} · {{ r.width }}×{{ r.height }}{% endif %}</dd>
+    {% if r.make or r.model %}<dt>Camera</dt><dd>{{ r.make or "" }} {{ r.model or "" }}</dd>{% endif %}
+    <dt>Sidecar</dt><dd>{{ "XMP/AAE file present" if r.has_sidecar else "none" }}</dd>
+    {% if r.sha1 %}<dt>SHA-1</dt><dd class="mono">{{ r.sha1[:16] }}…</dd>{% endif %}
+    <dt>Original</dt><dd><a href="/file/{{ r.id }}" download>Download original</a></dd>
+  </dl>
+  {% if twins %}
+  <div class="twins">
+    <h3>Identical copies ({{ twins | length }})</h3>
+    <ul>{% for t in twins %}<li><a href="/photo/{{ t.id }}">{{ t.path }}</a></li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Duplicates · Photo Curator{% endblock %}
+{% block content %}
+<h1>Exact duplicates</h1>
+<p class="muted">Files with byte-for-byte identical content. This page only lists them;
+nothing is deleted. Near-duplicates (resized or re-saved copies) come later.</p>
+{% for g in groups %}
+<section class="dupgroup">
+  <h3>{{ g.members | length }} copies · {{ g.size | human }}</h3>
+  <div class="grid small">
+    {% for m in g.members %}
+    <a class="cell" href="/photo/{{ m.id }}" title="{{ m.path }}">
+      <img loading="lazy" src="/thumb/{{ m.id }}" alt="{{ m.path }}">
+      <span class="date">{{ m.path }}</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% else %}
+<p class="empty">No exact duplicates in the index.</p>
+{% endfor %}
+{% endblock %}
