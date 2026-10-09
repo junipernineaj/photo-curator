@@ -36,7 +36,7 @@
       <img loading="lazy" src="/thumb/{{ r.id }}" alt="{{ r.path }}">
       {% if r.kind == 'video' %}<span class="badge">VIDEO</span>
       {% elif r.pair_key %}<span class="badge live">LIVE</span>{% endif %}
-      <span class="date">{{ r.taken_at | day }}</span>
+      <span class="date{% if r.date_source == 'mtime' %} guess{% endif %}">{{ r.taken_at | day }}{% if r.date_source == 'mtime' %} ?{% endif %}</span>
     </a>
     {% else %}
     <p class="empty">Nothing matches those filters.</p>

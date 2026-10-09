@@ -104,7 +104,7 @@ def index(request: Request, db=Depends(get_db), year: str = "", kind: str = "",
 
     total = db.execute(f"SELECT COUNT(*) FROM files WHERE {clause}", args).fetchone()[0]
     rows = db.execute(
-        f"SELECT id, path, kind, ext, taken_at, pair_key FROM files WHERE {clause} "
+        f"SELECT id, path, kind, ext, taken_at, pair_key, date_source FROM files WHERE {clause} "
         f"ORDER BY {order} LIMIT ? OFFSET ?", args + [PAGE_SIZE, (page - 1) * PAGE_SIZE]
     ).fetchall()
     years = db.execute(

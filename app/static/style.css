@@ -46,3 +46,4 @@ main{padding:16px;max-width:1500px;margin:0 auto}
 .meta dt{color:var(--muted)} .meta dd{margin:0;word-break:break-word}
 .twins{grid-column:1/-1}
 .dupgroup{margin:18px 0}
+.date.guess{color:#e0a458}
