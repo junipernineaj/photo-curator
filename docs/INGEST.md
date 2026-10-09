@@ -54,6 +54,9 @@ scripts/apple_pull.sh full
 
 The run is resumable: re-running skips files already downloaded.
 
+Note: the server has no desktop keyring, so the script uses
+`--password-provider console --mfa-provider console` and prompts at the terminal.
+
 ## Verify before trusting it
 
 - Compare the file count on disk with Photos' count on the iPhone (Albums > Media Types shows photos, videos, Live Photos).

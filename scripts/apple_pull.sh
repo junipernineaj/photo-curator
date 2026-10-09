@@ -19,10 +19,12 @@ COOKIES="${COOKIES:-$HOME/.icloudpd-cookies}"
 command -v icloudpd >/dev/null || { echo "icloudpd not found - see docs/INGEST.md"; exit 1; }
 mkdir -p "$DEST" "$COOKIES"
 
+# console providers: ask at the terminal (this server has no desktop keyring).
 # Files land in year/month folders. NEVER add --auto-delete or
 # --keep-icloud-recent-days here: they delete files.
 COMMON=(--directory "$DEST" --username "$ICLOUD_USER" --cookie-directory "$COOKIES"
-        --folder-structure "{:%Y/%m}")
+        --folder-structure "{:%Y/%m}"
+        --password-provider console --mfa-provider console)
 
 case "${1:-}" in
   auth)  icloudpd "${COMMON[@]}" --auth-only ;;
