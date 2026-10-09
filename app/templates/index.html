@@ -1,9 +1,13 @@
 {% extends "base.html" %}
 {% block content %}
-{% if lib == 'shared' %}<p class="muted small">The iCloud Shared Photo Library: photos shared with you and added by others,
-kept apart from your own. Photos you added to it are in here too.</p>{% endif %}
-<form class="filters" hx-get="{{ base_path }}" hx-target="#results" hx-select="#results" hx-swap="outerHTML"
+<form class="filters" hx-get="/" hx-target="#results" hx-select="#results" hx-swap="outerHTML"
       hx-push-url="true" hx-trigger="change, keyup changed delay:400ms from:#q">
+  <select name="source" aria-label="Source">
+    <option value="">All sources</option>
+    {% for x in sources %}
+    <option value="{{ x.key }}" {% if f.source == x.key %}selected{% endif %}>{{ x.label }} ({{ x.n }})</option>
+    {% endfor %}
+  </select>
   <select name="year" aria-label="Year">
     <option value="">All years</option>
     {% for y in years %}{% if y.y %}
@@ -42,7 +46,7 @@ kept apart from your own. Photos you added to it are in here too.</p>{% endif %}
       <span class="date{% if r.date_source == 'mtime' %} guess{% endif %}">{{ r.taken_at | day }}{% if r.date_source == 'mtime' %} ?{% endif %}</span>
     </a>
     {% else %}
-    <p class="empty">{% if lib == 'shared' %}Nothing here yet. Run scripts/apple_pull.sh shared-full, then scripts/scan_archive.py.{% else %}Nothing matches those filters.{% endif %}</p>
+    <p class="empty">Nothing matches those filters.</p>
     {% endfor %}
     {% if more_url %}
     <button class="more" hx-get="{{ more_url }}" hx-select="#grid > *" hx-target="this"

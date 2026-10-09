@@ -129,16 +129,32 @@ templates.env.filters["day"] = lambda s: (s or "")[:10]
 VISIBLE = "NOT (kind = 'video' AND pair_key IS NOT NULL)"
 
 
-# The iCloud Shared Photo Library is kept apart (scripts/apple_pull.sh shared-full writes it
-# to originals/apple-shared/) so other people's photos never mix into your own.
-SHARED_PREFIX = "apple-shared/"
-LIB_MINE = "path NOT LIKE 'apple-shared/%'"
-LIB_SHARED = "path LIKE 'apple-shared/%'"
+# The first folder under originals/ says where a photo came from. The grid's Source menu
+# filters on it. Unknown folders are listed under their folder name.
+SOURCE_LABELS = {
+    "apple": "iCloud: main library",
+    "apple-shared": "iCloud: shared library",
+    "exports": "Old Photos library export",
+    "photos-catchall": "Old photo folders",
+    "google": "Google Photos",
+    "scans": "Scanned prints",
+}
+SOURCE_EXPR = ("CASE WHEN instr(path, '/') > 0 THEN substr(path, 1, instr(path, '/') - 1) "
+               "ELSE '' END")
 
 
-def grid(request, db, lib, base_path, year, kind, live, q, src, sort, page):
-    scope = f"{VISIBLE} AND {LIB_SHARED if lib == 'shared' else LIB_MINE}"
-    where, args = [scope], []
+def grid(request, db, source, year, kind, live, q, src, sort, page):
+    sources = [{"key": r["s"], "label": SOURCE_LABELS.get(r["s"], r["s"] or "(top level)"), "n": r["n"]}
+               for r in db.execute(
+                   f"SELECT {SOURCE_EXPR} AS s, COUNT(*) n FROM {FILES} files WHERE {VISIBLE} "
+                   f"GROUP BY s ORDER BY n DESC")]
+    where, args = [VISIBLE], []
+    if source and any(x["key"] == source for x in sources):
+        like = source.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        where.append("path LIKE ? ESCAPE '\\'")
+        args.append(like + "/%")
+    else:
+        source = ""
     if year.isdigit():
         where.append("substr(taken_at,1,4) = ?")
         args.append(year)
@@ -164,30 +180,29 @@ def grid(request, db, lib, base_path, year, kind, live, q, src, sort, page):
         f"ORDER BY {order} LIMIT ? OFFSET ?", args + [PAGE_SIZE, (page - 1) * PAGE_SIZE]
     ).fetchall()
     years = db.execute(
-        f"SELECT substr(taken_at,1,4) y, COUNT(*) n FROM {FILES} files WHERE {scope} "
+        f"SELECT substr(taken_at,1,4) y, COUNT(*) n FROM {FILES} files WHERE {VISIBLE} "
         f"GROUP BY y ORDER BY y DESC").fetchall()
-    grand = db.execute(f"SELECT COUNT(*), COALESCE(SUM(size),0) FROM {FILES} files WHERE {scope}").fetchone()
+    grand = db.execute(f"SELECT COUNT(*), COALESCE(SUM(size),0) FROM {FILES} files WHERE {VISIBLE}").fetchone()
 
-    base = {"year": year, "kind": kind, "live": live, "q": q, "src": src, "sort": sort}
+    base = {"source": source, "year": year, "kind": kind, "live": live, "q": q, "src": src, "sort": sort}
     more_url = None
     if page * PAGE_SIZE < total:
-        more_url = base_path + "?" + urlencode({**{k: v for k, v in base.items() if v}, "page": page + 1})
+        more_url = "/?" + urlencode({**{k: v for k, v in base.items() if v}, "page": page + 1})
     return templates.TemplateResponse(request, "index.html", {
-        "rows": rows, "total": total, "years": years, "grand": grand,
-        "f": base, "more_url": more_url, "page": page,
-        "base_path": base_path, "lib": lib})
+        "rows": rows, "total": total, "years": years, "grand": grand, "sources": sources,
+        "f": base, "more_url": more_url, "page": page})
 
 
 @app.get("/", response_class=HTMLResponse)
-def index(request: Request, db=Depends(get_db), year: str = "", kind: str = "",
+def index(request: Request, db=Depends(get_db), source: str = "", year: str = "", kind: str = "",
           live: str = "", q: str = "", src: str = "", sort: str = "new", page: int = 1):
-    return grid(request, db, "mine", "/", year, kind, live, q, src, sort, page)
+    return grid(request, db, source, year, kind, live, q, src, sort, page)
 
 
-@app.get("/shared", response_class=HTMLResponse)
-def shared(request: Request, db=Depends(get_db), year: str = "", kind: str = "",
-           live: str = "", q: str = "", src: str = "", sort: str = "new", page: int = 1):
-    return grid(request, db, "shared", "/shared", year, kind, live, q, src, sort, page)
+@app.get("/shared")
+def shared():
+    """Old bookmark: the shared library is now a Source filter on the main page."""
+    return RedirectResponse("/?source=apple-shared", status_code=303)
 
 
 @app.get("/photo/{fid}", response_class=HTMLResponse)
