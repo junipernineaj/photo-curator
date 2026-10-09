@@ -102,6 +102,8 @@ What to do:
 - Open https://www.icloud.com/photos in a browser and leave it open; it signals when the library is ready, because your photos will load there.
 - Wait 15 to 30 minutes between retries rather than re-running repeatedly.
 - Don't change things in Photos on the iPhone in the meantime.
+- `scripts/apple_pull.sh wait` retries the 20-photo trial every 20 minutes (up to 24 tries) and stops when the indexing message disappears. Run it in tmux.
+- This version of icloudpd has no option to skip the indexing check, so waiting is the only route.
 - Success looks like `Downloading ... IMG_xxxx.HEIC` lines instead of the indexing message.
 
 ## Git and GitHub
