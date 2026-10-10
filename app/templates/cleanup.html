@@ -12,13 +12,13 @@ then run <code>scripts/quarantine.py</code> on the server. Moved files go to a q
 <p class="muted small">Each row: keep the copy in one source, quarantine the identical copy in another.
 Start small: look at examples, approve 100, run the script, check the result, then approve more.</p>
 <table class="cl">
-  <thead><tr><th>Keep the copy in</th><th>Quarantine the copy in</th><th>Files</th><th>Size</th><th>Check</th><th>Approve</th></tr></thead>
+  <thead><tr><th>Keep the copy in</th><th>Quarantine the copy in</th><th>Files</th><th>Size</th><th>Review</th><th>Approve</th></tr></thead>
   <tbody>
   {% for r in rows %}
   <tr>
     <td>{{ r.keep }}</td><td>{{ r.remove }}</td>
     <td class="num">{{ "{:,}".format(r.n) }}</td><td class="num">{{ r.bytes | human }}</td>
-    <td><a href="/cleanup/examples?keep={{ r.keep | urlencode }}&remove={{ r.remove | urlencode }}">20 examples</a></td>
+    <td><a href="/cleanup/review?keep={{ r.keep | urlencode }}&remove={{ r.remove | urlencode }}">review all</a></td>
     <td>
       {% for a in r.pending %}
       <form method="post" action="/cleanup/revoke">approved: up to {{ "{:,}".format(a.cap) }}

@@ -498,7 +498,9 @@ and in the backup. Retention is 30 days (`RETENTION_DAYS` in `app/dupes.py`).
 1. Open **Clean-up**. Each row is a rule: *keep the copy in A, quarantine the identical copy in B*. The keeper is chosen by
    `SOURCE_ORDER` in `app/dupes.py` (Takeout first, because it has the sidecar; then iCloud, exports, the library
    folders, and the aggregated copies last), then a sidecar, then the plainest file name. One copy always stays.
-2. Click **20 examples**, then **Approve** a small number first (100). An approval is one-shot.
+2. Click **review all**: every pair for that rule, kept copy left, copy to move right, 30 per page, ordered by path, size or
+   random. Press **Keep both** on any pair to leave it alone (it drops out of the plan and the script ignores it). The Approve bar
+   is on the same page (top and bottom); start with a small number (100). An approval is one-shot.
 3. On the server: `scripts/quarantine.py` (dry run), then `scripts/quarantine.py --apply`. Every file is re-hashed
    against its keeper first; sidecars (`.json`, `.xmp`, `.aae`) move with their photo; a date you set by hand on the
    moved copy is copied to the keeper. A manifest (`quarantine-manifest-<batch>.tsv`) and a log in `curator_edits.sqlite` record every move.

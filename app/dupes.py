@@ -64,8 +64,15 @@ CREATE TABLE IF NOT EXISTS quarantine_log (     -- one row per file moved; the a
   restored_at TEXT,
   purged_at TEXT
 );
+CREATE TABLE IF NOT EXISTS dup_exclude (        -- copies you said to leave alone ("keep both")
+  path TEXT PRIMARY KEY,
+  set_at TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS ql_batch ON quarantine_log(batch);
 """
+
+
+EXCLUDED = "You chose to keep both copies"
 
 
 def src_of(path):
@@ -119,6 +126,7 @@ def build_plan(db):
     for r in db.execute("SELECT pair_key, path, sha1 FROM main.files WHERE pair_key IS NOT NULL"):
         pair_shas[r[0]].append((r[1], r[2]))
 
+    excluded = {r[0] for r in db.execute("SELECT path FROM ed.dup_exclude")}
     groups = defaultdict(list)
     for r in rows:
         groups[(r["sha1"], r["size"])].append(r)
@@ -132,7 +140,9 @@ def build_plan(db):
         for v in rest:
             victims += 1
             item = {"keeper": keeper, "victim": v}
-            if v["override"] and keeper["override"] and v["override"] != keeper["override"]:
+            if v["path"] in excluded:
+                held[EXCLUDED].append(item)
+            elif v["override"] and keeper["override"] and v["override"] != keeper["override"]:
                 held["Both copies have a different date you set by hand"].append(item)
             elif v["pair_key"] and any(
                     p != v["path"] and sh not in dup_shas for p, sh in pair_shas[v["pair_key"]]):

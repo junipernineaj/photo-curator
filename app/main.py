@@ -360,13 +360,58 @@ def cleanup(request: Request, db=Depends(get_db)):
         "retention": dupes_mod.RETENTION_DAYS, "msg": request.query_params.get("msg", "")})
 
 
-@app.get("/cleanup/examples", response_class=HTMLResponse)
-def cleanup_examples(request: Request, keep: str, remove: str, db=Depends(get_db)):
-    import random
-    items = dupes_mod.build_plan(db)["pairs"].get((keep, remove), [])
-    sample = random.sample(items, min(20, len(items)))
-    return templates.TemplateResponse(request, "cleanup_examples.html", {
-        "keep": keep, "remove": remove, "n": len(items), "sample": sample})
+REVIEW_PAGE = 30
+
+
+@app.get("/cleanup/review", response_class=HTMLResponse)
+def cleanup_review(request: Request, keep: str, remove: str, db=Depends(get_db),
+                   page: int = 1, order: str = "path"):
+    plan = dupes_mod.build_plan(db)
+    items = list(plan["pairs"].get((keep, remove), []))
+    if order == "size":
+        items.sort(key=lambda i: -i["victim"]["size"])
+    elif order == "random":
+        import random
+        random.Random(int(request.query_params.get("seed", "1"))).shuffle(items)
+    else:
+        items.sort(key=lambda i: i["victim"]["path"])
+    pages = max(1, -(-len(items) // REVIEW_PAGE))
+    page = min(max(page, 1), pages)
+    shown = items[(page - 1) * REVIEW_PAGE: page * REVIEW_PAGE]
+    left_alone = [i for i in plan["held"].get(dupes_mod.EXCLUDED, [])
+                  if dupes_mod.src_of(i["keeper"]["path"]) == keep and dupes_mod.src_of(i["victim"]["path"]) == remove]
+    pending = db.execute("SELECT * FROM ed.dup_approval WHERE keep_src=? AND remove_src=? AND used_batch IS NULL",
+                         (keep, remove)).fetchall()
+    base = urlencode({"keep": keep, "remove": remove, "order": order, **(
+        {"seed": request.query_params.get("seed", "1")} if order == "random" else {})})
+    return templates.TemplateResponse(request, "cleanup_review.html", {
+        "keep": keep, "remove": remove, "n": len(items), "shown": shown, "page": page, "pages": pages,
+        "order": order, "base": base, "left_alone": left_alone, "pending": pending,
+        "bytes": sum(i["victim"]["size"] for i in items), "first": (page - 1) * REVIEW_PAGE,
+        "back": "/cleanup/review?" + base + f"&page={page}", "msg": request.query_params.get("msg", "")})
+
+
+def safe_back(back):
+    return back if back.startswith("/cleanup") and "//" not in back and "\n" not in back else "/cleanup"
+
+
+@app.post("/cleanup/exclude")
+async def cleanup_exclude(request: Request):
+    if not same_origin(request):
+        raise HTTPException(403, "Cross-site request refused")
+    form = await read_form(request)
+    path = form.get("path", "")
+    con = sqlite3.connect(EDITS)
+    try:
+        if form.get("undo") == "1":
+            con.execute("DELETE FROM dup_exclude WHERE path = ?", (path,))
+        elif path:
+            con.execute("INSERT OR REPLACE INTO dup_exclude(path, set_at) VALUES (?,?)",
+                        (path, datetime.now().isoformat(timespec="seconds")))
+        con.commit()
+    finally:
+        con.close()
+    return RedirectResponse(safe_back(form.get("back", "")), status_code=303)
 
 
 @app.post("/cleanup/approve")
@@ -380,7 +425,8 @@ async def cleanup_approve(request: Request):
     except ValueError:
         cap = 0
     if not keep or not rem or not 1 <= cap <= 100000:
-        return RedirectResponse("/cleanup?msg=Enter+a+number+of+files+between+1+and+100000", status_code=303)
+        return RedirectResponse(safe_back(form.get("back", "")) + ("&" if "?" in form.get("back", "") else "?")
+                                + "msg=Enter+a+number+of+files+between+1+and+100000", status_code=303)
     con = sqlite3.connect(EDITS)
     try:
         con.execute("INSERT INTO dup_approval(keep_src, remove_src, cap, approved_at) VALUES (?,?,?,?)",
@@ -388,7 +434,8 @@ async def cleanup_approve(request: Request):
         con.commit()
     finally:
         con.close()
-    return RedirectResponse(f"/cleanup?msg=Approved+up+to+{cap}+files.+Nothing+moves+until+you+run+scripts/quarantine.py+--apply", status_code=303)
+    back = safe_back(form.get("back", ""))
+    return RedirectResponse(f"{back}{'&' if '?' in back else '?'}msg=Approved+up+to+{cap}+files.+Nothing+moves+until+you+run+scripts/quarantine.py+--apply", status_code=303)
 
 
 @app.post("/cleanup/revoke")
@@ -402,7 +449,8 @@ async def cleanup_revoke(request: Request):
         con.commit()
     finally:
         con.close()
-    return RedirectResponse("/cleanup?msg=Approval+withdrawn", status_code=303)
+    back = safe_back(form.get("back", ""))
+    return RedirectResponse(f"{back}{'&' if '?' in back else '?'}msg=Approval+withdrawn", status_code=303)
 
 
 SIM_PAGE = 20

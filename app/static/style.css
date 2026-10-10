@@ -71,3 +71,6 @@ main{padding:16px;max-width:1500px;margin:0 auto}
 .notice{background:var(--panel);border:1px solid var(--line);padding:8px 12px;border-radius:6px;margin:10px 0}
 .pair{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0;padding-bottom:12px;border-bottom:1px solid var(--line)}
 .pair img{max-width:100%;max-height:220px;display:block}
+.revbar{position:sticky;top:0;z-index:5;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:8px 12px;margin:10px 0;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.revbar form{display:inline-flex;gap:6px;align-items:center} .revbar input[type=number]{width:90px}
+.pager{display:flex;gap:16px;align-items:center;justify-content:center;margin:18px 0}

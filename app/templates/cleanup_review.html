@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Review · Photo Curator{% endblock %}
+{% block content %}
+{% macro bar() %}
+<div class="revbar">
+  <form method="post" action="/cleanup/approve">
+    <input type="hidden" name="keep" value="{{ keep }}"><input type="hidden" name="remove" value="{{ remove }}">
+    <input type="hidden" name="back" value="{{ back }}">
+    Quarantine up to <input type="number" name="cap" min="1" max="100000" value="{{ n }}" aria-label="Number of files">
+    of {{ "{:,}".format(n) }} ({{ bytes | human }})
+    <button type="submit">Approve</button>
+  </form>
+  {% for a in pending %}<span class="muted small">approved: up to {{ "{:,}".format(a.cap) }}</span>
+  <form method="post" action="/cleanup/revoke"><input type="hidden" name="id" value="{{ a.id }}">
+    <input type="hidden" name="back" value="{{ back }}"><button type="submit">withdraw</button></form>{% endfor %}
+</div>
+{% endmacro %}
+<p><a href="/cleanup">&larr; Clean-up</a></p>
+<h1>Keep {{ keep }} · quarantine {{ remove }}</h1>
+{% if msg %}<p class="notice">{{ msg }}</p>{% endif %}
+<p class="muted">Every pair here is byte-identical. Left is the copy that stays; right is the copy that would be
+moved to quarantine. Scroll through, and use <b>Keep both</b> on any you want left alone. Then approve.
+Approving moves nothing until you run <code>scripts/quarantine.py --apply</code>.</p>
+{{ bar() }}
+<p class="small">Order:
+  {% for o in ["path", "size", "random"] %}{% if o == order %}<b>{{ o }}</b>{% else %}<a href="/cleanup/review?keep={{ keep | urlencode }}&remove={{ remove | urlencode }}&order={{ o }}">{{ o }}</a>{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}
+  &nbsp;|&nbsp; {{ first + 1 }}–{{ first + (shown | length) }} of {{ "{:,}".format(n) }}</p>
+
+{% for s in shown %}
+<div class="pair">
+  <div><a href="/photo/{{ s.keeper.id }}"><img loading="lazy" src="/thumb/{{ s.keeper.id }}" alt=""></a>
+    <p class="small mono">KEEP {{ s.keeper.path }}</p></div>
+  <div><a href="/photo/{{ s.victim.id }}"><img loading="lazy" src="/thumb/{{ s.victim.id }}" alt=""></a>
+    <p class="small mono">MOVE {{ s.victim.path }} · {{ s.victim.size | human }}</p>
+    <form method="post" action="/cleanup/exclude"><input type="hidden" name="path" value="{{ s.victim.path }}">
+      <input type="hidden" name="back" value="{{ back }}"><button type="submit">Keep both</button></form></div>
+</div>
+{% else %}<p class="empty">Nothing to review for this rule.</p>{% endfor %}
+
+<p class="pager">
+  {% if page > 1 %}<a href="/cleanup/review?{{ base }}&page={{ page - 1 }}">&larr; Previous</a>{% endif %}
+  Page {{ page }} of {{ pages }}
+  {% if page < pages %}<a href="/cleanup/review?{{ base }}&page={{ page + 1 }}">Next &rarr;</a>{% endif %}
+</p>
+{{ bar() }}
+
+{% if left_alone %}
+<h2>Left alone ({{ left_alone | length }})</h2>
+{% for s in left_alone %}
+<p class="small mono">{{ s.victim.path }}
+  <form method="post" action="/cleanup/exclude" style="display:inline"><input type="hidden" name="path" value="{{ s.victim.path }}">
+    <input type="hidden" name="undo" value="1"><input type="hidden" name="back" value="{{ back }}"><button type="submit">Put back in the list</button></form></p>
+{% endfor %}{% endif %}
+{% endblock %}
