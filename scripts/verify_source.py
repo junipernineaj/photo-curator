@@ -37,6 +37,7 @@ def sha1_of(path):
 
 
 LIB = re.compile(r"\.(photoslibrary|aplibrary|photolibrary)/", re.I)
+LIB_ROOT = re.compile(r"\.(photoslibrary|aplibrary|photolibrary)/[^/]+$", re.I)
 INTERNAL_DIRS = re.compile(r"/(private|database|scopes|internal|Backup)/")
 INTERNAL_FILES = {".ipspot_update", "Projects.db", "ProjectDBVersion.plist", "PkgInfo", "Recents.plist"}
 METADATA = re.compile(r"(\.aae$|AlbumData2?\.xml$)", re.I)
@@ -50,6 +51,8 @@ def classify(path, kind="MISSING", names=frozenset()):
         return "junk" if os.path.islink(path) and not os.path.exists(path) else "real"
     if METADATA.search(name):
         return "metadata"
+    if LIB_ROOT.search(path):                  # the library's own database files, top level of the package
+        return "junk" if "lock" in name.lower() or name.endswith((".lck", ".tmp")) else "metadata"
     if LIB.search(path) and (INTERNAL_DIRS.search(path) or name in INTERNAL_FILES):
         return "junk"
     if name in INTERNAL_FILES or "/Snagit/" in path or "/Photo Booth Library/" in path:
