@@ -327,3 +327,19 @@ are on Wi-Fi; first run order is iPhoto then Aperture, then the other three. Pit
 2011 to 2013, then refresh the backup and the offsite drive. Then the Review page. Cable the server if possible.
 Still deferred: removal list for exact duplicates (about 29,800 spare copies), retiring Pictures and
 AGGREGATED-Photos, the iCloud and Google clearing plan.
+
+**Later on 10 Oct: the remaining libraries and the 2012 gap.** Copied from the Mac's 8TB-One (rsync over Wi-Fi,
+3 to 18 MB/s) into `photos-catchall/`: Mum's old iPhoto library (year folders 2000 to 2013, thumbnails and the
+iPod cache excluded, `AlbumData.xml` kept), `Aperture-Library-masters`, `Photos-Library-2014-masters`,
+`Doha-masters`, and both `82EdgbastonRoad` libraries (subsets of Doha, mostly repeats). OcadoImages was work
+screenshots and was skipped. `Masters/YYYY/MM/DD` folders in Photos libraries record the IMPORT date, not the
+shot date; the real dates come from EXIF. Then `Images-Backup` (1 GB, from ExtremeSSD): 328 files dated 2012.
+Index: 124,191 files, 462 GB, similar groups about 14,600, exact duplicates 31,563 groups with 36,811
+spare copies. Early years filled in (2003: 0 to 364, 2004: 7 to 3,345, 2005: 3 to 1,325). The 2011 to 2013 gap
+(lost disks in 2012) is only partly filled: 2012 went from 180 to 626 items; May 2011 to April 2013 stays thin.
+`park_thumbnails.py --previews` parked the 408 Apple `_4_5005_c` previews that have a full-size twin; 2,556
+have none (cropped previews do not fingerprint like the whole photo) and stay for a look. Mistakes noted: a
+query alias that shadowed a column name (`kind`) gave a wrong grouping; exported shell variables are needed
+for `bash -c`. Next: checksum dry runs for all copied libraries, backup top-up to Juniper12, offsite drive,
+then duplicate removal list, Review page, iCloud and Google plan. Other leads for 2011 to 2013: iPhone backups
+in `~/Library/Application Support/MobileSync/Backup` on old Macs, Facebook "Download your information".
