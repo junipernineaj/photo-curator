@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Examples · Photo Curator{% endblock %}
+{% block content %}
+<p><a href="/cleanup">&larr; Clean-up</a></p>
+<h1>Keep {{ keep }} · quarantine {{ remove }}</h1>
+<p class="muted">{{ "{:,}".format(n) }} files match this rule. A random {{ sample | length }} are shown: the kept copy
+on the left, the copy that would be quarantined on the right. They are byte-identical.</p>
+{% for s in sample %}
+<div class="pair">
+  <div><a href="/photo/{{ s.keeper.id }}"><img loading="lazy" src="/thumb/{{ s.keeper.id }}" alt=""></a>
+    <p class="small mono">KEEP {{ s.keeper.path }}</p></div>
+  <div><a href="/photo/{{ s.victim.id }}"><img loading="lazy" src="/thumb/{{ s.victim.id }}" alt=""></a>
+    <p class="small mono">MOVE {{ s.victim.path }} · {{ s.victim.size | human }}</p></div>
+</div>
+{% endfor %}
+<p><a href="/cleanup">&larr; Back to the rules</a></p>
+{% endblock %}

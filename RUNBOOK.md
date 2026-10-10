@@ -487,3 +487,25 @@ which piled up in March 2021). `scripts/park_thumbnails.py --previews` parks a p
 in its name, or a member of the same similar-photo group with at least 2x the pixels (`--min-ratio`).
 Previews with no twin stay indexed. Dry run by default; `--apply` moves, `--undo` puts back (use the
 same `--previews`). Then run `scan_archive.py` and `find_similar.py`.
+
+### Clearing exact duplicates (Clean-up page + `scripts/quarantine.py`)
+
+Nothing is ever deleted from the web page, and the page cannot move files either: it only records what you approve.
+`scripts/quarantine.py` (run on the server) is the only thing that moves files, into `originals/_quarantine/<batch>/<same path>`.
+It is a same-disk rename; the scanner skips `_` folders, so the files leave every page after the next scan but stay on disk
+and in the backup. Retention is 30 days (`RETENTION_DAYS` in `app/dupes.py`).
+
+1. Open **Clean-up**. Each row is a rule: *keep the copy in A, quarantine the identical copy in B*. The keeper is chosen by
+   `SOURCE_ORDER` in `app/dupes.py` (Takeout first, because it has the sidecar; then iCloud, exports, the library
+   folders, and the aggregated copies last), then a sidecar, then the plainest file name. One copy always stays.
+2. Click **20 examples**, then **Approve** a small number first (100). An approval is one-shot.
+3. On the server: `scripts/quarantine.py` (dry run), then `scripts/quarantine.py --apply`. Every file is re-hashed
+   against its keeper first; sidecars (`.json`, `.xmp`, `.aae`) move with their photo; a date you set by hand on the
+   moved copy is copied to the keeper. A manifest (`quarantine-manifest-<batch>.tsv`) and a log in `curator_edits.sqlite` record every move.
+4. `scripts/scan_archive.py`, `scripts/find_similar.py`; check the Photos/Timeline pages; approve more.
+5. Undo: `scripts/quarantine.py --restore BATCH` (add `--path SUB` for part, `--apply` to do it).
+6. After 30 days: `scripts/quarantine.py --purge BATCH` (dry run), then `--apply` (asks you to type the batch name).
+   It refuses earlier. Purge is the only step that deletes. `--status` lists batches and days remaining.
+
+Held back, never offered: copies where both have different hand-set dates, and Live Photo halves whose partner has no
+matching copy. The Juniper12 backup uses no `--delete`, so it keeps the old paths too; prune it only after a purge.

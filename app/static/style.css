@@ -64,3 +64,10 @@ main{padding:16px;max-width:1500px;margin:0 auto}
 .tl td a{text-decoration:none;color:var(--ink)}
 .tl td.gap{color:var(--muted);outline:2px dashed var(--accent);outline-offset:-3px}
 .tl td.tot{font-weight:600}
+.cl{border-collapse:collapse;width:100%;margin:10px 0 22px;font-variant-numeric:tabular-nums}
+.cl th,.cl td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:middle}
+.cl thead th{background:var(--panel)} .cl td.num{text-align:right;white-space:nowrap}
+.cl form{display:inline-flex;gap:6px;align-items:center} .cl input[type=number]{width:80px}
+.notice{background:var(--panel);border:1px solid var(--line);padding:8px 12px;border-radius:6px;margin:10px 0}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.pair img{max-width:100%;max-height:220px;display:block}

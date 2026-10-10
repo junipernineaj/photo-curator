@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import similar, thumbs
+from . import dupes as dupes_mod, similar, thumbs
 
 HERE = Path(__file__).parent
 ARCHIVE = os.path.realpath(os.environ.get(
@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS date_override (
 def init_edits():
     con = sqlite3.connect(EDITS)
     con.executescript(EDITS_SCHEMA)
+    con.executescript(dupes_mod.EDITS_SCHEMA)
     con.commit()
     con.close()
 
@@ -327,6 +328,81 @@ def dups(request: Request, db=Depends(get_db)):
                              "ORDER BY path", (g["sha1"], g["size"])).fetchall()
         out.append({"size": g["size"], "members": members})
     return templates.TemplateResponse(request, "dups.html", {"groups": out})
+
+
+# ---- exact-duplicate clean-up (the page only records approvals; scripts/quarantine.py moves files) ----
+
+@app.get("/cleanup", response_class=HTMLResponse)
+def cleanup(request: Request, db=Depends(get_db)):
+    plan = dupes_mod.build_plan(db)
+    approvals = {}
+    for a in db.execute("SELECT * FROM ed.dup_approval ORDER BY id"):
+        approvals.setdefault((a["keep_src"], a["remove_src"]), []).append(a)
+    rows = []
+    for (keep, rem), items in plan["pairs"].items():
+        rows.append({"keep": keep, "remove": rem, "n": len(items),
+                     "bytes": sum(i["victim"]["size"] for i in items),
+                     "pending": [a for a in approvals.get((keep, rem), []) if not a["used_batch"]]})
+    rows.sort(key=lambda r: -r["bytes"])
+    held = [{"why": why, "n": len(items), "bytes": sum(i["victim"]["size"] for i in items)}
+            for why, items in plan["held"].items()]
+    batches = []
+    for b in db.execute(
+            "SELECT batch, COUNT(*) n, SUM(size) bytes, MAX(moved_at) last, "
+            "SUM(restored_at IS NOT NULL) restored, SUM(purged_at IS NOT NULL) purged "
+            "FROM ed.quarantine_log GROUP BY batch ORDER BY batch DESC"):
+        d = dict(b)
+        d["left"] = dupes_mod.retention_left(b["last"])
+        batches.append(d)
+    return templates.TemplateResponse(request, "cleanup.html", {
+        "rows": rows, "held": held, "batches": batches, "groups": plan["groups"],
+        "victims": plan["victims"], "total_bytes": sum(r["bytes"] for r in rows),
+        "retention": dupes_mod.RETENTION_DAYS, "msg": request.query_params.get("msg", "")})
+
+
+@app.get("/cleanup/examples", response_class=HTMLResponse)
+def cleanup_examples(request: Request, keep: str, remove: str, db=Depends(get_db)):
+    import random
+    items = dupes_mod.build_plan(db)["pairs"].get((keep, remove), [])
+    sample = random.sample(items, min(20, len(items)))
+    return templates.TemplateResponse(request, "cleanup_examples.html", {
+        "keep": keep, "remove": remove, "n": len(items), "sample": sample})
+
+
+@app.post("/cleanup/approve")
+async def cleanup_approve(request: Request):
+    if not same_origin(request):
+        raise HTTPException(403, "Cross-site request refused")
+    form = await read_form(request)
+    keep, rem = form.get("keep", ""), form.get("remove", "")
+    try:
+        cap = int(form.get("cap", ""))
+    except ValueError:
+        cap = 0
+    if not keep or not rem or not 1 <= cap <= 100000:
+        return RedirectResponse("/cleanup?msg=Enter+a+number+of+files+between+1+and+100000", status_code=303)
+    con = sqlite3.connect(EDITS)
+    try:
+        con.execute("INSERT INTO dup_approval(keep_src, remove_src, cap, approved_at) VALUES (?,?,?,?)",
+                    (keep, rem, cap, datetime.now().isoformat(timespec="seconds")))
+        con.commit()
+    finally:
+        con.close()
+    return RedirectResponse(f"/cleanup?msg=Approved+up+to+{cap}+files.+Nothing+moves+until+you+run+scripts/quarantine.py+--apply", status_code=303)
+
+
+@app.post("/cleanup/revoke")
+async def cleanup_revoke(request: Request):
+    if not same_origin(request):
+        raise HTTPException(403, "Cross-site request refused")
+    form = await read_form(request)
+    con = sqlite3.connect(EDITS)
+    try:
+        con.execute("DELETE FROM dup_approval WHERE id = ? AND used_batch IS NULL", (form.get("id", ""),))
+        con.commit()
+    finally:
+        con.close()
+    return RedirectResponse("/cleanup?msg=Approval+withdrawn", status_code=303)
 
 
 SIM_PAGE = 20

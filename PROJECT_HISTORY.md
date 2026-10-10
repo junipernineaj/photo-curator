@@ -343,3 +343,12 @@ query alias that shadowed a column name (`kind`) gave a wrong grouping; exported
 for `bash -c`. Next: checksum dry runs for all copied libraries, backup top-up to Juniper12, offsite drive,
 then duplicate removal list, Review page, iCloud and Google plan. Other leads for 2011 to 2013: iPhone backups
 in `~/Library/Application Support/MobileSync/Backup` on old Macs, Facebook "Download your information".
+
+## 10 Oct (evening): exact-duplicate clean-up by quarantine
+
+Decision: duplicates are never deleted from the UI. The Clean-up page records approved rules ("keep the copy in A,
+quarantine the identical copy in B", one-shot, capped), and `scripts/quarantine.py` on the server does the moving into
+`originals/_quarantine/<batch>/`, with re-hashing of both copies, sidecars moved along, restore, and a purge that
+refuses before 30 days. Keeper order: Takeout, iCloud, exports, library folders, aggregated copies. Reason for the split:
+the browse app will later sit behind Cloudflare and should hold no power to move files. Tested on a small fake archive
+(move, sidecar, hand-set date copied, second run does nothing, restore, early purge refused); not yet run on real data.

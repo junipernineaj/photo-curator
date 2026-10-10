@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Clean-up · Photo Curator{% endblock %}
+{% block content %}
+<h1>Clean up exact duplicates</h1>
+<p class="muted">{{ "{:,}".format(victims) }} spare copies in {{ "{:,}".format(groups) }} groups of
+byte-identical files. One copy of each is always kept. This page never moves anything: you approve a rule here,
+then run <code>scripts/quarantine.py</code> on the server. Moved files go to a quarantine folder for
+{{ retention }} days and can be put back.</p>
+{% if msg %}<p class="notice">{{ msg }}</p>{% endif %}
+
+<h2>Rules ({{ total_bytes | human }} could be freed)</h2>
+<p class="muted small">Each row: keep the copy in one source, quarantine the identical copy in another.
+Start small: look at examples, approve 100, run the script, check the result, then approve more.</p>
+<table class="cl">
+  <thead><tr><th>Keep the copy in</th><th>Quarantine the copy in</th><th>Files</th><th>Size</th><th>Check</th><th>Approve</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr>
+    <td>{{ r.keep }}</td><td>{{ r.remove }}</td>
+    <td class="num">{{ "{:,}".format(r.n) }}</td><td class="num">{{ r.bytes | human }}</td>
+    <td><a href="/cleanup/examples?keep={{ r.keep | urlencode }}&remove={{ r.remove | urlencode }}">20 examples</a></td>
+    <td>
+      {% for a in r.pending %}
+      <form method="post" action="/cleanup/revoke">approved: up to {{ "{:,}".format(a.cap) }}
+        <input type="hidden" name="id" value="{{ a.id }}"><button type="submit">withdraw</button></form><br>
+      {% endfor %}
+      <form method="post" action="/cleanup/approve">
+        <input type="hidden" name="keep" value="{{ r.keep }}"><input type="hidden" name="remove" value="{{ r.remove }}">
+        <input type="number" name="cap" min="1" max="100000" value="{{ [100, r.n] | min }}" aria-label="Number of files">
+        <button type="submit">Approve</button>
+      </form>
+    </td>
+  </tr>
+  {% else %}<tr><td colspan="6">No exact duplicates to clean up.</td></tr>{% endfor %}
+  </tbody>
+</table>
+
+{% if held %}
+<h2>Held back for a look</h2>
+<p class="muted small">These are never offered for approval.</p>
+<table class="cl"><thead><tr><th>Why</th><th>Files</th><th>Size</th></tr></thead><tbody>
+{% for h in held %}<tr><td>{{ h.why }}</td><td class="num">{{ "{:,}".format(h.n) }}</td><td class="num">{{ h.bytes | human }}</td></tr>{% endfor %}
+</tbody></table>
+{% endif %}
+
+<h2>Quarantine batches</h2>
+<table class="cl"><thead><tr><th>Batch</th><th>Files</th><th>Size</th><th>Restored</th><th>Purged</th><th>Purge allowed</th></tr></thead><tbody>
+{% for b in batches %}
+<tr><td class="mono">{{ b.batch }}</td><td class="num">{{ "{:,}".format(b.n) }}</td><td class="num">{{ (b.bytes or 0) | human }}</td>
+  <td class="num">{{ b.restored }}</td><td class="num">{{ b.purged }}</td>
+  <td>{% if b.left <= 0 %}now{% else %}in {{ b.left | round(1) }} days{% endif %}</td></tr>
+{% else %}<tr><td colspan="6">Nothing quarantined yet.</td></tr>{% endfor %}
+</tbody></table>
+<p class="muted small">At the server: <code>scripts/quarantine.py</code> (dry run), <code>--apply</code>,
+<code>--status</code>, <code>--restore BATCH [--apply]</code>, <code>--purge BATCH [--apply]</code>.
+After a move or restore, re-run scan_archive.py and find_similar.py.</p>
+{% endblock %}
