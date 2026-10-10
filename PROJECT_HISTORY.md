@@ -279,3 +279,14 @@ Sharpest pick the right frame?); keep/reject marks and a Review page with bulk a
 burst groups (not yet confirmed by Tony); a proposed (never automatic) removal list for exact
 duplicates; the 2,964 tiny thumbnails; retiring Pictures and the aggregated folder after the
 backup; the iCloud and Google clearing plan; Immich, Qwen tagging, Cloudflare Tunnel + Access.
+
+**Disk sweep (10 Oct, afternoon).** A read-only image count per top-level folder on Juniper10 to 13
+found no further photo collections. The hits were album art (Flac-Music, Music-MP3), Plex's
+PhotoTranscoder cache, and scratch pages from the OCR work (`Juniper13/tmp/ocrmypdf.*`). Juniper11
+holds only Movies (9.5 TB). The photo sources are therefore complete: iCloud (own and shared),
+Pictures, AGGREGATED-Photos and Google.
+
+**First backup started (10 Oct, 13:58).** `rsync -avh --partial` of `photo-archive` to
+`Juniper12/photo-archive-backup`, excluding `thumbs/` (rebuildable), `takeout-unpacked/` (staging) and
+`takeout-zips/` (contents already in `originals/google`; kept on Juniper13 as a spare). No `--delete`.
+To be followed by an `rsync -avhnc` checksum dry run and a restore test.
