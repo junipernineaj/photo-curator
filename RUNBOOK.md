@@ -478,3 +478,12 @@ The backup rsync has no `--delete`, so the backup keeps the old paths as well as
 as gaps, and each month links to its photos. "Leave out guessed dates" ignores files dated only
 by their file date, so a bulk-copy pile-up cannot hide a real gap. The Photos page also has a
 Month filter next to Year. Read-only: it reads the same index as the other pages.
+
+### Apple preview files (`<UUID>_4_5005_c.jpeg`)
+
+Photos leaves small preview copies of photos (2,964 here, dated only by the day they were copied,
+which piled up in March 2021). `scripts/park_thumbnails.py --previews` parks a preview into
+`originals/_previews-apple/` only when the archive holds a full-size version: a file with the same UUID
+in its name, or a member of the same similar-photo group with at least 2x the pixels (`--min-ratio`).
+Previews with no twin stay indexed. Dry run by default; `--apply` moves, `--undo` puts back (use the
+same `--previews`). Then run `scan_archive.py` and `find_similar.py`.
