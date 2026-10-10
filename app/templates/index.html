@@ -14,6 +14,12 @@
     <option value="{{ y.y }}" {% if f.year == y.y %}selected{% endif %}>{{ y.y }} ({{ y.n }})</option>
     {% endif %}{% endfor %}
   </select>
+  <select name="month" aria-label="Month">
+    <option value="">All months</option>
+    {% for m in ['January','February','March','April','May','June','July','August','September','October','November','December'] %}
+    <option value="{{ loop.index }}" {% if f.month == loop.index|string %}selected{% endif %}>{{ m }}</option>
+    {% endfor %}
+  </select>
   <select name="kind" aria-label="Type">
     <option value="">Photos and videos</option>
     <option value="photo" {% if f.kind == 'photo' %}selected{% endif %}>Photos</option>

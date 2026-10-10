@@ -143,7 +143,7 @@ SOURCE_EXPR = ("CASE WHEN instr(path, '/') > 0 THEN substr(path, 1, instr(path, 
                "ELSE '' END")
 
 
-def grid(request, db, source, year, kind, live, q, src, sort, page):
+def grid(request, db, source, year, kind, live, q, src, sort, page, month=""):
     sources = [{"key": r["s"], "label": SOURCE_LABELS.get(r["s"], r["s"] or "(top level)"), "n": r["n"]}
                for r in db.execute(
                    f"SELECT {SOURCE_EXPR} AS s, COUNT(*) n FROM {FILES} files WHERE {VISIBLE} "
@@ -158,6 +158,11 @@ def grid(request, db, source, year, kind, live, q, src, sort, page):
     if year.isdigit():
         where.append("substr(taken_at,1,4) = ?")
         args.append(year)
+    if month.isdigit() and 1 <= int(month) <= 12:
+        where.append("substr(taken_at,6,2) = ?")
+        args.append(f"{int(month):02d}")
+    else:
+        month = ""
     if kind in ("photo", "video"):
         where.append("kind = ?")
         args.append(kind)
@@ -184,7 +189,7 @@ def grid(request, db, source, year, kind, live, q, src, sort, page):
         f"GROUP BY y ORDER BY y DESC").fetchall()
     grand = db.execute(f"SELECT COUNT(*), COALESCE(SUM(size),0) FROM {FILES} files WHERE {VISIBLE}").fetchone()
 
-    base = {"source": source, "year": year, "kind": kind, "live": live, "q": q, "src": src, "sort": sort}
+    base = {"source": source, "year": year, "month": month, "kind": kind, "live": live, "q": q, "src": src, "sort": sort}
     more_url = None
     if page * PAGE_SIZE < total:
         more_url = "/?" + urlencode({**{k: v for k, v in base.items() if v}, "page": page + 1})
@@ -195,8 +200,44 @@ def grid(request, db, source, year, kind, live, q, src, sort, page):
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request, db=Depends(get_db), source: str = "", year: str = "", kind: str = "",
-          live: str = "", q: str = "", src: str = "", sort: str = "new", page: int = 1):
-    return grid(request, db, source, year, kind, live, q, src, sort, page)
+          live: str = "", q: str = "", src: str = "", sort: str = "new", page: int = 1,
+          month: str = ""):
+    return grid(request, db, source, year, kind, live, q, src, sort, page, month)
+
+
+MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+@app.get("/timeline", response_class=HTMLResponse)
+def timeline(request: Request, db=Depends(get_db), source: str = "", dated: str = ""):
+    """Year by month grid of how many items there are, so gaps in the collection stand out.
+
+    By default every item counts. dated=1 leaves out dates that are only a guess (file date),
+    which would otherwise hide a real gap behind an export-day pile-up.
+    """
+    where, args = [VISIBLE, "taken_at IS NOT NULL"], []
+    if source:
+        like = source.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        where.append("path LIKE ? ESCAPE '\\'")
+        args.append(like + "/%")
+    if dated == "1":
+        where.append("date_source != 'mtime'")
+    rows = db.execute(
+        f"SELECT substr(taken_at,1,4) y, substr(taken_at,6,2) m, COUNT(*) n FROM {FILES} files "
+        f"WHERE {' AND '.join(where)} GROUP BY y, m", args).fetchall()
+    cells = {(r["y"], r["m"]): r["n"] for r in rows}
+    years = sorted({y for y, _ in cells if y.isdigit() and 1990 <= int(y) <= datetime.now().year + 1})
+    first, last = (years[0], years[-1]) if years else (None, None)
+    table = []
+    for y in range(int(first), int(last) + 1) if years else []:
+        ys = str(y)
+        months = [cells.get((ys, f"{m:02d}"), 0) for m in range(1, 13)]
+        table.append({"year": ys, "months": months, "total": sum(months)})
+    biggest = max([n for t in table for n in t["months"]] or [1])
+    sources = [{"key": k, "label": v} for k, v in SOURCE_LABELS.items()]
+    return templates.TemplateResponse(request, "timeline.html", {
+        "table": table, "biggest": biggest, "month_names": MONTH_NAMES,
+        "f": {"source": source, "dated": dated}, "sources": sources})
 
 
 @app.get("/shared")

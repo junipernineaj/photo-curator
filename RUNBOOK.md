@@ -471,3 +471,10 @@ scripts/scan_archive.py               # forgets the moved files
 
 The backup rsync has no `--delete`, so the backup keeps the old paths as well as the new
 `_thumbnails-…` ones until you choose to tidy it (about 0.7 GB).
+
+## Timeline (year by month)
+
+`/timeline` shows a year-by-month grid of how many items there are; empty months are outlined
+as gaps, and each month links to its photos. "Leave out guessed dates" ignores files dated only
+by their file date, so a bulk-copy pile-up cannot hide a real gap. The Photos page also has a
+Month filter next to Year. Read-only: it reads the same index as the other pages.

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Timeline - Photo Curator{% endblock %}
+{% block content %}
+<form class="filters" method="get" action="/timeline">
+  <select name="source" aria-label="Source" onchange="this.form.submit()">
+    <option value="">All sources</option>
+    {% for x in sources %}<option value="{{ x.key }}" {% if f.source == x.key %}selected{% endif %}>{{ x.label }}</option>{% endfor %}
+  </select>
+  <label class="check"><input type="checkbox" name="dated" value="1" {% if f.dated == '1' %}checked{% endif %}
+    onchange="this.form.submit()"> Leave out guessed dates (file date only)</label>
+</form>
+<p class="muted small">How many photos and videos there are for each month. Empty months are outlined: gaps worth
+  looking for in old backups. Click a month to see its photos.</p>
+<div class="tl-wrap"><table class="tl">
+  <thead><tr><th>Year</th>{% for m in month_names %}<th>{{ m }}</th>{% endfor %}<th>Total</th></tr></thead>
+  <tbody>
+  {% for t in table %}
+  <tr><th>{{ t.year }}</th>
+    {% for n in t.months %}
+    <td class="{% if n == 0 %}gap{% endif %}" {% if n %}style="--w: {{ (n / biggest * 100) | round(0) | int }}%"{% endif %}>
+      {% if n %}<a href="/?year={{ t.year }}&month={{ loop.index }}{% if f.source %}&source={{ f.source }}{% endif %}">{{ "{:,}".format(n) }}</a>{% else %}0{% endif %}
+    </td>
+    {% endfor %}
+    <td class="tot">{{ "{:,}".format(t.total) }}</td></tr>
+  {% else %}<tr><td colspan="14">Nothing indexed yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% endblock %}
