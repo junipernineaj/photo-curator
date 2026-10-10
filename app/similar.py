@@ -84,22 +84,28 @@ def _u(h):
     return h + (1 << 64) if h < 0 else h
 
 
-def group_hashes(items, threshold=5, spread=3, max_bucket=400):
+def group_hashes(items, threshold=5, spread=3, max_bucket=2500):
     """items: list of (key, signed_hash). Returns (groups, skipped_buckets).
 
-    Candidate pairs come from 8 byte-sized slices of the hash: two hashes within 7 bits
-    must agree exactly on at least one slice (pigeonhole), so we only compare within
-    buckets. Pairs are merged closest-first, and two clusters only join if EVERY cross
-    pair is within threshold+spread bits, which stops long "A looks like B looks like C"
-    chains from swallowing unrelated photos.
+    Candidate pairs come from threshold+1 slices of the 64-bit hash: two hashes within
+    `threshold` bits must agree exactly on at least one slice (pigeonhole), so we only compare
+    within buckets. Fewer, wider slices than before (6 slices of 10 to 11 bits at the default,
+    not 8 of one byte) keep the buckets small as the archive grows: with 90,000 photos a
+    one-byte slice put about 350 in an average bucket and many above the limit. Pairs are
+    merged closest-first, and two clusters only join if EVERY cross pair is within
+    threshold+spread bits, which stops long "A looks like B looks like C" chains from
+    swallowing unrelated photos.
     """
     if not 0 <= threshold <= 7:
         raise ValueError("threshold must be between 0 and 7")
     hs = [_u(h) for _, h in items]
+    n_slices = threshold + 1
+    bounds = [round(i * 64 / n_slices) for i in range(n_slices + 1)]
     buckets = defaultdict(list)
     for i, h in enumerate(hs):
-        for s in range(8):
-            buckets[(s, (h >> (8 * s)) & 0xFF)].append(i)
+        for s in range(n_slices):
+            lo, hi = bounds[s], bounds[s + 1]
+            buckets[(s, (h >> lo) & ((1 << (hi - lo)) - 1))].append(i)
     cands, skipped = {}, 0
     for members in buckets.values():
         if len(members) > max_bucket:

@@ -210,11 +210,17 @@ not byte-identical. It never changes a photo.
    Blurred frames score low. It is only meaningful between photos of the same scene, and a
    noisy or brightened copy can score high.
 3. **Grouping:** two photos are candidates if they differ by at most `--threshold` bits
-   (default 5, maximum 7, so that an eight-way split of the hash guarantees a shared slice).
-   Pairs are merged closest-first, and two groups only join if every cross pair is within
-   threshold + 3 bits, which stops chains of "A looks like B looks like C" from swallowing
-   unrelated photos. Very crowded buckets (over 400) are skipped and counted in the report.
-   Grouping 50,000 hashes took about 4 seconds in testing.
+   (default 5, maximum 7). The 64-bit hash is cut into threshold + 1 slices (6 slices of 10 to
+   11 bits at the default); two hashes within the threshold must agree exactly on at least one
+   slice, so only photos sharing a slice value are compared. Pairs are merged closest-first,
+   and two groups only join if every cross pair is within threshold + 3 bits, which stops
+   chains of "A looks like B looks like C" from swallowing unrelated photos. Buckets over
+   2,500 photos are skipped and counted in the report.
+   Scaling lesson (10 Oct, 91,000 photos): the first version used eight one-byte slices, which
+   put about 350 photos in an average bucket, so 742 buckets went over its limit of 400 and
+   many matches were never compared. On skewed test data it found 54% of planted near-duplicate
+   pairs; the 6-slice version finds 96% (2,500 limit) and is as fast (about 6 seconds for
+   93,000 hashes). A high "crowded buckets skipped" figure means matches are being missed.
 4. **Left out:** groups whose files all have the same SHA-1 (the Duplicates page covers
    those).
 5. **Suggestions, never decisions:** each group marks its **Sharpest** photo (best for
