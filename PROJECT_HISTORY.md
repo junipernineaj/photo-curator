@@ -216,3 +216,66 @@ failure.
 the full similar-photo run and review; keep/reject marks; Google Takeout download; Immich;
 Qwen tagging; Cloudflare Tunnel + Access; a nightly backup of the SQLite files, in particular
 `curator_edits.sqlite`.
+
+## 10 Oct: everything in one place
+
+**Where things stood.** By the evening of 9 Oct the iCloud pull (own and shared libraries) was
+done and indexed. Over 9 and 10 Oct three more sources came in and Google arrived.
+
+**Old folders brought in.** `/media/aj9/Juniper13/Pictures` (53 GB) was copied into
+`originals/photos-catchall/Pictures-juniper13` (rsync with a checksum dry run afterwards: clean).
+Its three `.photoslibrary` packages were handled by looking inside first: the two iPhoto
+libraries were identical (1,197 originals each), so one was copied (`originals/` only);
+the Photos library (868 originals) was a separate, smaller library and was copied too.
+`PersonalPhotos/AGGREGATED-Photos` on Juniper12 (28,233 files, 75 GB, flat folder of Android and
+Pixel era photos) was copied into `Personal-Photos-aggregated`. The home movies folder next
+to it (2,454 files, partly short clips, at least one work recording) was left alone.
+Retirement rules for source folders were written into the RUNBOOK: prove the copy, make a
+second copy of the archive on another disk, decide about packages, only then delete, with
+Tony's approval. **The backup to Juniper12 was deliberately deferred until everything is in
+one place.** Nothing has been deleted anywhere.
+
+**Dates.** Bulk copies had reset file dates (5,831 files dated 2021 or 2022 were really
+collection days). Added a `filename` date source (Android, WhatsApp, burst names and the Unix
+timestamps in Facebook and Snapchat names) and `scan_archive.py --redate`. 1,754 files now
+take their date from the name. About 4,300 files remain dated only by file date; 2,964 of
+them are tiny (about 290 x 330 pixel) Photos thumbnails, probably from the aggregated folder,
+which are to be sorted out after the Google import (those with a full-size twin proposed for
+rejection, the rest parked). Reading dates from the Photos library database for 384 further
+files was judged not worth it (the names in it are UUIDs and the dates look like import dates).
+
+**Fixes found on the way.** 92 Pixel burst cover JPEGs were 37 bytes short and failed
+thumbnailing; thumbnails now read truncated JPEGs and `find_similar.py` retries failures
+(clear the `.fail` markers first).
+
+**Google Takeout.** Four zips (84,233 entries, about 188 GiB) were downloaded on the Mac,
+copied to `photo-archive/takeout-zips/`, verified with `unzip -tq`, and unpacked into
+`takeout-unpacked/`. `scripts/import_takeout.py` (dry run by default) matches photos to their
+JSON sidecars and moves them into `originals/google/`. The real data needed three rules a fake
+test had not shown: truncated and numbered sidecar names, album folders that name sidecars
+without the extension, and the video halves of Live and motion photos (about 2,900 files),
+which have no sidecar and use their still's. After those, 44,653 of 44,678 media files matched
+(25 without a sidecar). The scanner reads the sidecar date (`date_source = google`) for photos
+with no camera date; 4,423 files took it. Album copies identical to a year-folder photo (216)
+were skipped and left in staging. Import took the archive to 98,208 files and 364.8 GB.
+
+**What the import showed.** Exact duplicates rose from 2,912 to 28,235 groups: 29,255 spare
+copies, 95.3 GB. 22,512 of the 28,233 aggregated files are byte-identical to Takeout files
+(so the aggregated folder was an earlier Google Photos download), 2,523 Takeout files match the
+iCloud shared library and 156 the own iCloud library (iPhone photos were also backed up to
+Google). About 18,500 of the 44,462 Google files are genuinely new. The Takeout copy has the
+sidecar, so it is the one to keep in any duplicate clean-up; about 5,700 aggregated files
+are not in the Takeout, so that folder cannot be dropped wholesale.
+
+**Scaling fix.** At 91,000 photos the similar-photo grouping skipped 742 crowded buckets
+(was 55) because one-byte slices put about 350 photos in an average bucket. On skewed test
+data it found only 54% of planted pairs. Switched to threshold + 1 wider slices and a 2,500
+limit (96% in the same test, as fast). On the real archive: crowded buckets 742 to 0, groups
+9,545 to 9,900.
+
+**Still open (10 Oct).** Sweep the other disks for photo folders not yet found; the backup of
+`photo-archive` to Juniper12 and a tested restore; Tony's review of the Similar page (does
+Sharpest pick the right frame?); keep/reject marks and a Review page with bulk accept for the
+burst groups (not yet confirmed by Tony); a proposed (never automatic) removal list for exact
+duplicates; the 2,964 tiny thumbnails; retiring Pictures and the aggregated folder after the
+backup; the iCloud and Google clearing plan; Immich, Qwen tagging, Cloudflare Tunnel + Access.
