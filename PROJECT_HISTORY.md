@@ -290,3 +290,40 @@ Pictures, AGGREGATED-Photos and Google.
 `Juniper12/photo-archive-backup`, excluding `thumbs/` (rebuildable), `takeout-unpacked/` (staging) and
 `takeout-zips/` (contents already in `originals/google`; kept on Juniper13 as a spare). No `--delete`.
 To be followed by an `rsync -avhnc` checksum dry run and a restore test.
+
+**Backup verified (10 Oct, 16:35).** `photo-archive` copied to `Juniper12/photo-archive-backup` (380.5 GB,
+excluding thumbs, takeout-unpacked, takeout-zips). Checksum dry run (`-avhnc`): no files differ. Restore
+test: both databases `ok`, 98,208 files in the backup index, five random files matched their recorded
+SHA-1. Plan: take a copy of the backup to Tony's mother's house as the offsite copy once the archive is
+complete, and refresh it after the next import. Not yet done: top-up of the backup after the imports below.
+
+**PicturesPreFreya (14 GB, 21,251 JPEGs, 2005 to 2014).** Found on the Mac's ExtremeSSD. Copied into
+`photos-catchall/PicturesPreFreya` and scanned. 8,557 are real photos named by date and time. About
+12,700 are tool-made `J<w>x<h>-<n>.jpg` thumbnails dated only by the 2014 export day. New script
+`scripts/park_thumbnails.py` moved the 11,144 clearly small ones (both sides 500 px or less, no camera data)
+to `originals/_thumbnails-PicturesPreFreya/` (skipped by the scanner, not deleted, undo manifest). 1,550 stay
+for review (1,453 larger, 97 with camera data). Index now 108,315 files; similar groups 13,256.
+
+**Similar page findings.** Largest and sharpest agree in 5,945 groups and disagree in 7,311. Of those,
+5,169 differ by under 25% in sharpness (near-ties), 192 are a much smaller sharper copy, and 1,950 are
+genuinely different. Tony cannot tell Largest and Sharpest apart by eye. Proposed Review page (keep and reject
+marks, suggested keeper = largest with sharpness as tie-break, bursts kept separate from copies) is built
+only after Tony says yes; he wants the further libraries imported first.
+
+**Timeline page** (`/timeline`, commit 8f3ebc0): year by month grid with empty months outlined, plus a Month
+filter. It showed the real gap: April 2011 to April 2013 (2012 has 180 items in total), caused by a 2012
+incident in which Tony's disks were lost. Hunting for that period in every old backup.
+
+**More libraries found** on the Mac drive 8TB-One under `Backup/Downloads`: Aperture Library (23 GB masters),
+Photos Library (23 GB), Doha (16 GB), 82EdgbastonRoad (3.3 GB, plus an Aperture version, 0.6 GB), and an
+old iPhoto library from Tony's mother's old computer (his pictures, about 12.6 GB, year folders 2000 to 2013,
+with `2012` and `2013`). OcadoImages holds work screenshots, skipped. Plan: copy only the `Masters/` folders
+and the iPhoto year folders (about 83 GB) into `photos-catchall/` using rsync from the Mac (the disk is
+Mac-formatted, so it cannot be plugged into the server). The copy ran at 3 to 18 MB/s because both machines
+are on Wi-Fi; first run order is iPhoto then Aperture, then the other three. Pitfall met: variables must be
+`export`ed before `caffeinate bash -c`.
+
+**Next.** Finish the copies, checksum dry run (`-avhnc`), scan and `find_similar`, compare the Timeline for
+2011 to 2013, then refresh the backup and the offsite drive. Then the Review page. Cable the server if possible.
+Still deferred: removal list for exact duplicates (about 29,800 spare copies), retiring Pictures and
+AGGREGATED-Photos, the iCloud and Google clearing plan.
