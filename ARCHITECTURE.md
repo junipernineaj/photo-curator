@@ -108,7 +108,7 @@ the iCloud web site and downloads the originals.
 - **Reads:** metadata in batches with `exiftool` (JSON), and a SHA-1 of each file.
 - **Capture date and where it came from** (`date_source`), best first: `exif` (camera),
   `filename` (a date in the file name, such as `IMG_20180619_220821.jpg`, `PXL_20210531_…`,
-  `BURST20170329111938`; date-only names are stored at 12:00), `folder` (a date in the folder
+  `BURST20170329111938`, and the Unix timestamps in `FB_IMG_…` and `Snapchat-…`; date-only names are stored at 12:00), `folder` (a date in the folder
   name such as `2013_02_10`), `mtime` (file modification time,
   the least reliable: copying or exporting resets it).
 - **Live Photo pairing** (`pair_key`): first by Apple's content identifier shared by the still

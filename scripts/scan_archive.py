@@ -73,6 +73,9 @@ FOLDER_YEAR = re.compile(r"(?<!\d)((?:19|20)\d{2})(?!\d)")
 # IMG-20190101-WA0001.jpg (date only), 2008-12-25 Christmas.jpg (date only).
 NAME_DATE = re.compile(r"(?<!\d)((?:19|20)\d{2})[-_]?(0[1-9]|1[0-2])[-_]?(0[1-9]|[12]\d|3[01])"
                        r"(?:[-_ T.]?([01]\d|2[0-3])([0-5]\d)([0-5]\d))?")
+# Facebook and Snapchat save the time as a Unix timestamp: FB_IMG_1560160487953 (milliseconds),
+# Snapchat-1522734537 (seconds).
+EPOCH_NAME = re.compile(r"(?<![0-9])(?:FB_IMG_(\d{13})|Snapchat-(\d{10}))(?!\d)", re.I)
 UUID_NAME = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I)
 
 
@@ -121,6 +124,15 @@ def date_from_filename(rel_path, today=None):
     if UUID_NAME.match(name):
         return None
     today = today or datetime.now()
+    m = EPOCH_NAME.search(name)
+    if m:
+        try:
+            secs = int(m[1]) / 1000 if m[1] else int(m[2])
+            d = datetime.fromtimestamp(secs)
+            if datetime(2005, 1, 1) <= d <= today:
+                return d.replace(microsecond=0).isoformat()
+        except (ValueError, OverflowError, OSError):
+            pass
     for m in NAME_DATE.finditer(name):
         if m[4] is None and name[m.end():m.end() + 1].isdigit():
             continue                      # a longer run of digits, not a date
