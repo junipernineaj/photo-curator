@@ -42,7 +42,7 @@ INTERNAL_FILES = {".ipspot_update", "Projects.db", "ProjectDBVersion.plist", "Pk
 METADATA = re.compile(r"(\.aae$|AlbumData2?\.xml$)", re.I)
 
 
-def classify(path, kind="MISSING"):
+def classify(path, kind="MISSING", names=frozenset()):
     """Sort a MISSING/UNREADABLE entry: 'junk' (safe to ignore), 'metadata' (small edit/album
     information worth keeping a copy of) or 'real' (could be a photo or video: must be looked at)."""
     name = os.path.basename(path)
@@ -59,14 +59,16 @@ def classify(path, kind="MISSING"):
         for e in (".MP4", ".mp4", ".Mp4"):
             if os.path.exists(stem + e):
                 return "junk"
+        if (os.path.basename(stem) + ".mp4").lower() in names:   # the real clip is in the archive
+            return "junk"
     return "real"
 
 
-def verdict(entries):
+def verdict(entries, names=frozenset()):
     """entries: [(kind, path)].  Prints a summary and returns the verdict line."""
     groups = {"junk": [], "metadata": [], "real": []}
     for kind, p in entries:
-        groups[classify(p, kind)].append(p)
+        groups[classify(p, kind, names)].append(p)
     print(f"  ignorable (library caches/databases, broken shortcuts, GoPro proxies, Snagit): {len(groups['junk'])}")
     print(f"  metadata (Photos .aae edit files, AlbumData2.xml album lists):                 {len(groups['metadata'])}")
     print(f"  REAL (could be photos or videos):                                              {len(groups['real'])}")
@@ -81,14 +83,16 @@ def verdict(entries):
     return "SAFE TO CONSIDER RETIRING"
 
 
-def recheck(report):
+def recheck(report, archive=ARCHIVE_ROOT):
     entries = []
     for line in open(report, encoding="utf-8"):
         parts = line.rstrip("\n").split("\t")
         if parts[0] in ("MISSING", "UNREADABLE") and len(parts) > 1:
             entries.append((parts[0], parts[1].split("[Errno")[0]))
     print(f"{len(entries)} entries in {report}")
-    print(verdict(entries))
+    db = sqlite3.connect(f"file:{os.path.join(archive, 'curator.sqlite')}?mode=ro", uri=True)
+    names = {os.path.basename(r[0]).lower() for r in db.execute("SELECT path FROM files WHERE lower(ext) IN ('mp4', '.mp4')")}
+    print(verdict(entries, names))
 
 
 def main():
@@ -101,7 +105,7 @@ def main():
                     help="no hashing: re-sort an existing report into ignorable / metadata / REAL")
     a = ap.parse_args()
     if a.recheck:
-        return recheck(a.recheck)
+        return recheck(a.recheck, a.archive)
     if not a.source:
         ap.error("give a source folder (or --recheck REPORT)")
     skip = DEFAULT_SKIP | set(a.skip)
@@ -164,8 +168,9 @@ def main():
     print(f"  MISSING:       {len(missing)}")
     print(f"  unreadable:    {len(unreadable)}")
     print(f"report: {report}")
+    names = {os.path.basename(r[0]).lower() for r in db.execute("SELECT path FROM files WHERE lower(ext) IN ('mp4', '.mp4')")}
     print(verdict([("MISSING", p) for p in missing] +
-                  [("UNREADABLE", u.split("\t")[0]) for u in unreadable]))
+                  [("UNREADABLE", u.split("\t")[0]) for u in unreadable], names))
 
 
 if __name__ == "__main__":
