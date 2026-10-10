@@ -12,13 +12,17 @@ Usage:
 Options:
   --skip NAME    skip folders or files with this name (repeatable). Default skips .DS_Store,
                  Thumbs.db, and iPhoto/Photos library caches: Thumbnails, Previews, resources
+  --recheck REPORT  no hashing: re-sort an existing report, separating junk (library caches, GoPro
+                 proxies, broken shortcuts) from metadata (.aae, AlbumData2.xml) and REAL files
   --report FILE  where to write the MISSING list (default: ~/verify-<name>.txt)
 """
 import argparse
 import hashlib
 import os
+import re
 import sqlite3
 import sys
+from collections import Counter
 
 ARCHIVE_ROOT = "/media/aj9/Juniper13/photo-archive"
 DEFAULT_SKIP = {".DS_Store", "Thumbs.db", "Thumbnails", "Previews", "resources", "iPod Photo Cache", "Thumbs"}
@@ -32,13 +36,74 @@ def sha1_of(path):
     return h.hexdigest()
 
 
+LIB = re.compile(r"\.(photoslibrary|aplibrary|photolibrary)/", re.I)
+INTERNAL_DIRS = re.compile(r"/(private|database|scopes|internal|Backup)/")
+INTERNAL_FILES = {".ipspot_update", "Projects.db", "ProjectDBVersion.plist", "PkgInfo", "Recents.plist"}
+METADATA = re.compile(r"(\.aae$|AlbumData2?\.xml$)", re.I)
+
+
+def classify(path, kind="MISSING"):
+    """Sort a MISSING/UNREADABLE entry: 'junk' (safe to ignore), 'metadata' (small edit/album
+    information worth keeping a copy of) or 'real' (could be a photo or video: must be looked at)."""
+    name = os.path.basename(path)
+    if kind == "UNREADABLE":
+        return "junk" if os.path.islink(path) and not os.path.exists(path) else "real"
+    if METADATA.search(name):
+        return "metadata"
+    if LIB.search(path) and (INTERNAL_DIRS.search(path) or name in INTERNAL_FILES):
+        return "junk"
+    if name in INTERNAL_FILES or "/Snagit/" in path or "/Photo Booth Library/" in path:
+        return "junk"
+    stem, ext = os.path.splitext(path)
+    if ext.lower() in (".lrv", ".thm"):       # GoPro proxy video / thumbnail beside the real clip
+        for e in (".MP4", ".mp4", ".Mp4"):
+            if os.path.exists(stem + e):
+                return "junk"
+    return "real"
+
+
+def verdict(entries):
+    """entries: [(kind, path)].  Prints a summary and returns the verdict line."""
+    groups = {"junk": [], "metadata": [], "real": []}
+    for kind, p in entries:
+        groups[classify(p, kind)].append(p)
+    print(f"  ignorable (library caches/databases, broken shortcuts, GoPro proxies, Snagit): {len(groups['junk'])}")
+    print(f"  metadata (Photos .aae edit files, AlbumData2.xml album lists):                 {len(groups['metadata'])}")
+    print(f"  REAL (could be photos or videos):                                              {len(groups['real'])}")
+    for p in groups["real"][:30]:
+        print(f"     {p}")
+    for p in groups["metadata"][:30]:
+        print(f"     (metadata) {p}")
+    if groups["real"]:
+        return "NOT SAFE: the REAL files above are not in the archive"
+    if groups["metadata"]:
+        return "SAFE FOR PHOTOS AND VIDEOS; the metadata files listed are not in the archive: keep the library packages"
+    return "SAFE TO CONSIDER RETIRING"
+
+
+def recheck(report):
+    entries = []
+    for line in open(report, encoding="utf-8"):
+        parts = line.rstrip("\n").split("\t")
+        if parts[0] in ("MISSING", "UNREADABLE") and len(parts) > 1:
+            entries.append((parts[0], parts[1].split("[Errno")[0]))
+    print(f"{len(entries)} entries in {report}")
+    print(verdict(entries))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("source")
+    ap.add_argument("source", nargs="?")
     ap.add_argument("--archive", default=ARCHIVE_ROOT)
     ap.add_argument("--skip", action="append", default=[])
     ap.add_argument("--report", default=None)
+    ap.add_argument("--recheck", metavar="REPORT",
+                    help="no hashing: re-sort an existing report into ignorable / metadata / REAL")
     a = ap.parse_args()
+    if a.recheck:
+        return recheck(a.recheck)
+    if not a.source:
+        ap.error("give a source folder (or --recheck REPORT)")
     skip = DEFAULT_SKIP | set(a.skip)
     src = os.path.abspath(a.source)
     if not os.path.isdir(src):
@@ -99,8 +164,8 @@ def main():
     print(f"  MISSING:       {len(missing)}")
     print(f"  unreadable:    {len(unreadable)}")
     print(f"report: {report}")
-    print("SAFE TO CONSIDER RETIRING" if not missing and not unreadable
-          else "NOT SAFE: look at the report first")
+    print(verdict([("MISSING", p) for p in missing] +
+                  [("UNREADABLE", u.split("\t")[0]) for u in unreadable]))
 
 
 if __name__ == "__main__":
