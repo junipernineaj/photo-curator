@@ -451,3 +451,23 @@ Never delete a source folder until all of these are done, in this order:
   run `find_similar.py`, then retire the source folder using the checklist above.
 - Build keep/reject marks and the review page.
 - Install Immich and run a trial import.
+
+## Parking generated thumbnails (`park_thumbnails.py`)
+
+Some old exports contain tool-made small copies named like `J240x240-09561.jpg`
+(`PicturesPreFreya`: about 12,500 of 21,251 files). They have no camera dates, so they all
+land on the export date and make "similar" groups with their own originals. The script
+moves the clearly small ones (both sides at most 500 px, no camera make) into
+`originals/_thumbnails-<name>/`, which the scanner skips. It never deletes; a manifest
+allows `--undo`. Larger `J…` files and any with camera data stay indexed for review.
+
+```
+git pull
+scripts/park_thumbnails.py            # dry run: counts and examples
+scripts/park_thumbnails.py --apply
+scripts/scan_archive.py               # forgets the moved files
+~/venvs/curator/bin/python scripts/find_similar.py
+```
+
+The backup rsync has no `--delete`, so the backup keeps the old paths as well as the new
+`_thumbnails-…` ones until you choose to tidy it (about 0.7 GB).
