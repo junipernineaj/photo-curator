@@ -62,7 +62,8 @@ def exact_candidates(name):
         for c in (base + SUP + ".json",          # new style
                   base2 + SUP + dup + ".json",   # new style, numbered duplicate
                   base2 + dup + ".json",         # old style, numbered duplicate: IMG.jpg(1).json
-                  base + ".json"):               # old style
+                  base + ".json",                # old style
+                  os.path.splitext(base)[0] + SUP + ".json"):   # no extension (some albums)
             if c not in out:
                 out.append(c)
     return out
@@ -97,6 +98,32 @@ def find_sidecar(name, jsons, load):
             if data is not None and title_ok(data, base):
                 return best[1]
     return None
+
+
+VIDEO_EXT = {".mp4", ".mov", ".m4v", ".3gp", ".avi", ".mts", ".mp"}
+
+
+def sibling_sidecars(media, sidecar_of):
+    """Sidecars for videos that have none of their own.
+
+    Google gives only the still a sidecar; the video half of a Live Photo or Android motion
+    photo (IMG_0116.MP4 beside IMG_0116.HEIC, MVIMG_x.MP4 beside MVIMG_x.jpg, PXL_x.MP beside
+    PXL_x.MP.jpg) has none. Such a video borrows the sidecar of the still with the same name.
+    Returns {video name: sidecar name}. Only videos borrow, never stills."""
+    index = {}
+    for name in sorted(sidecar_of):
+        if os.path.splitext(name)[1].lower() not in VIDEO_EXT:
+            index.setdefault(os.path.splitext(name)[0].lower(), []).append(name)
+    out = {}
+    for name in media:
+        if name in sidecar_of or os.path.splitext(name)[1].lower() not in VIDEO_EXT:
+            continue
+        low = name.lower()
+        for key in (low, os.path.splitext(low)[0]):
+            if key in index:
+                out[name] = sidecar_of[index[key][0]]
+                break
+    return out
 
 
 def sha1_of(path):
@@ -145,8 +172,13 @@ def plan(gp):
             return cache[p]
 
         used = set()
+        own = {n: find_sidecar(n, jsons, load) for n in sorted(media)}
+        own = {n: sc for n, sc in own.items() if sc}
+        borrowed = sibling_sidecars(media, own)
+        stats["sidecar_from_still"] += len(borrowed)
+        own.update(borrowed)
         for n in sorted(media):
-            sc = find_sidecar(n, jsons, load)
+            sc = own.get(n)
             if sc:
                 used.add(sc)
             else:
@@ -248,6 +280,7 @@ def main():
     lines = [
         f"Media files found in staging:      {stats['media_found']}",
         f"  with a matched sidecar:          {stats['with_sidecar']}",
+        f"  (of which videos using their still's sidecar: {stats['sidecar_from_still']})",
         f"  without a sidecar:               {len(lists['no_sidecar'])}",
         f"Album copies identical to a year-folder photo (left in staging): {len(skipped_dupes)}",
         f"{'Moved' if args.apply else 'Would move'} into the archive:        {moved}",

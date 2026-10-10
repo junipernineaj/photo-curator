@@ -35,7 +35,7 @@ DEFAULT_ARCHIVE = "/media/aj9/Juniper13/photo-archive/originals"
 
 PHOTO_EXT = {".jpg", ".jpeg", ".heic", ".heif", ".png", ".gif", ".tif", ".tiff",
              ".webp", ".cr2", ".cr3", ".dng", ".nef", ".arw", ".orf", ".rw2"}
-VIDEO_EXT = {".mov", ".mp4", ".m4v", ".avi", ".mts", ".3gp"}
+VIDEO_EXT = {".mov", ".mp4", ".m4v", ".avi", ".mts", ".3gp", ".mp"}   # .mp: Pixel motion-photo video
 SIDECAR_EXT = {".xmp", ".aae", ".thm"}
 # Folders that are never indexed: anything starting with "_" (our parking
 # folders) and the internals of Apple/Aperture library packages.
@@ -254,6 +254,8 @@ def build_pair_keys(db):
     groups = {}
     for fid, path, kind in rows:
         stem = os.path.splitext(path)[0].lower()
+        if kind == "video" and path.lower().endswith(".mp"):
+            stem = path.lower()           # PXL_x.MP pairs with PXL_x.MP.jpg
         if kind == "video" and stem.endswith("_hevc"):
             stem = stem[: -len("_hevc")]
         groups.setdefault(stem, []).append((fid, kind))

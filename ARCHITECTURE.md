@@ -281,7 +281,13 @@ into one tree):
   `-edited` copies have no sidecar of their own and use the original's.
 - The sidecar carries `photoTakenTime.timestamp` (Unix time, UTC), GPS, description and the
   Google Photos URL. Zip file dates are the export date (9 Oct 2026), so they are useless.
-- Pixel motion photos export an extra `.MP` file (the video), not indexed yet.
+- The video half of a Live Photo or Android motion photo (`IMG_0116.MP4` beside `IMG_0116.HEIC`,
+  `MVIMG_x.MP4`, Pixel `PXL_x.MP` beside `PXL_x.MP.jpg`) has no sidecar of its own: about 2,900
+  of the 44,678 media files. The importer lets such a video use its still's sidecar, and the
+  scanner indexes `.mp` as video and pairs `PXL_x.MP` with `PXL_x.MP.jpg`. Some albums name
+  sidecars without the extension (`2_25_14 - 15.supplemental-metadata.json`); also handled.
+  Left in staging on purpose: `shared_album_comments.json`, `user-generated-memory-titles.json`
+  and 6 odd names (`PXL_x.MP~2`).
 
 Flow: unpack all zips into `photo-archive/takeout-unpacked/` (outside `originals/`), then
 `scripts/import_takeout.py` (dry run by default, `--apply` to do it) matches each photo to its
