@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS files (
   mtime_ns INTEGER NOT NULL,
   sha1 TEXT,
   taken_at TEXT,                    -- ISO 8601, local time, no zone
-  date_source TEXT,                 -- exif | filename | folder | mtime
+  date_source TEXT,                 -- exif | google | filename | folder | mtime
   width INTEGER, height INTEGER,
   make TEXT, model TEXT,
   content_id TEXT,                  -- Apple Live Photo content identifier
@@ -112,6 +112,25 @@ def date_from_path(rel_path):
         if m:
             return datetime(int(m[1]), 1, 1).isoformat()
     return None
+
+
+def google_sidecar_date(abs_path):
+    """Capture time from a Google Takeout sidecar next to the file, or None.
+
+    import_takeout.py leaves "<file>.supplemental-metadata.json" beside each photo. Its
+    photoTakenTime is a Unix time (UTC); like file dates it is shown as local time."""
+    try:
+        with open(abs_path + ".supplemental-metadata.json", encoding="utf-8") as f:
+            ts = int(((json.load(f).get("photoTakenTime") or {}).get("timestamp")) or 0)
+    except (OSError, ValueError, TypeError, AttributeError):
+        return None
+    if ts <= 0:
+        return None
+    try:
+        d = datetime.fromtimestamp(ts)
+    except (OverflowError, OSError, ValueError):
+        return None
+    return d.isoformat(timespec="seconds") if d.year >= 1990 else None
 
 
 def date_from_filename(rel_path, today=None):
@@ -320,6 +339,9 @@ def main():
                          or parse_exif_date(t.get("CreateDate"))
                          or parse_exif_date(t.get("MediaCreateDate")))
                 source = "exif" if taken else None
+                if not taken:
+                    taken = google_sidecar_date(abs_path)
+                    source = "google" if taken else None
                 if not taken:
                     taken = date_from_filename(rel)
                     source = "filename" if taken else None

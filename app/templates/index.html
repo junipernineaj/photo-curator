@@ -22,6 +22,7 @@
   <select name="src" aria-label="Date source">
     <option value="">Any date source</option>
     <option value="exif" {% if f.src == 'exif' %}selected{% endif %}>Date from camera</option>
+    <option value="google" {% if f.src == 'google' %}selected{% endif %}>Date from Google Photos</option>
     <option value="filename" {% if f.src == 'filename' %}selected{% endif %}>Date from file name</option>
     <option value="folder" {% if f.src == 'folder' %}selected{% endif %}>Date from folder name</option>
     <option value="mtime" {% if f.src == 'mtime' %}selected{% endif %}>Date from file (least reliable)</option>

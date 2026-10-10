@@ -20,7 +20,7 @@
   <dl class="meta">
     <dt>File</dt><dd class="path">{{ r.path }}</dd>
     <dt>Taken</dt><dd>{{ r.taken_at or "unknown" }}
-      <span class="muted">({{ {'exif':'from the camera','filename':'read from the file name','folder':'guessed from folder name','mtime':'from file date, least reliable','manual':'set by you'}.get(r.date_source, 'unknown') }})</span></dd>
+      <span class="muted">({{ {'exif':'from the camera','google':'from Google Photos','filename':'read from the file name','folder':'guessed from folder name','mtime':'from file date, least reliable','manual':'set by you'}.get(r.date_source, 'unknown') }})</span></dd>
     <dt>Size</dt><dd>{{ r.size | human }}{% if r.width %} · {{ r.width }}×{{ r.height }}{% endif %}</dd>
     {% if r.make or r.model %}<dt>Camera</dt><dd>{{ r.make or "" }} {{ r.model or "" }}</dd>{% endif %}
     <dt>Sidecar</dt><dd>{{ "XMP/AAE file present" if r.has_sidecar else "none" }}</dd>

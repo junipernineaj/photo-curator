@@ -11,7 +11,7 @@ tidying. Nothing is deleted automatically, and no photo leaves the house.
 
 ```
  iCloud Photos ──icloudpd──┐
- Google Takeout zips ──────┼──►  /media/aj9/Juniper13/photo-archive/originals/
+ Google Takeout zips ──────┼──►  /media/aj9/Juniper13/photo-archive/originals/   (unzipped, via import_takeout.py)
  Scanned prints ───────────┘            │  (read-only master copies)
                                         ▼
                                Immich (store + viewer)          [planned]
@@ -34,7 +34,7 @@ tidying. Nothing is deleted automatically, and no photo leaves the house.
 | Manual date corrections (single photo or folder) | Built; tested on sample data |
 | Near-duplicate finder with sharpness and burst labels (`scripts/find_similar.py`, `app/similar.py`, Similar page) | Built. Trial on 300 photos gave 75 groups, all bursts; full run in progress |
 | Apple originals via the Mac (Photos download + `osxphotos`) | Started 9 Oct 13:30: the Mac's new system library is downloading originals from iCloud |
-| Google Takeout ingest | Requested 9 Oct; waiting for Google |
+| Google Takeout ingest (`scripts/import_takeout.py`; sidecar dates in the scanner) | Downloaded 10 Oct (4 parts, 188 GiB, 84,233 entries, zips verified). Importer built and tested on a fake Takeout; real unpack and import next |
 | Immich on junipernine2 | Not started |
 | Curator app (Live frame picker, duplicates, scoring) | Not started |
 | Qwen tagging | Not started |
@@ -58,7 +58,9 @@ photo data sits in its own `photo-archive/` folder.
 ```
 /media/aj9/Juniper13/photo-archive/
   originals/apple/    icloudpd output, in year/month folders
-  originals/google/   Takeout zips, kept untouched
+  originals/google/   unpacked Takeout photos with their JSON sidecars, in Google's own folders
+  takeout-zips/       the Takeout zips, untouched (outside originals/, never indexed)
+  takeout-unpacked/   staging area while importing (outside originals/)
   originals/scans/    scanned prints (later)
 ```
 
@@ -265,11 +267,30 @@ removed:
 - A review step lists exactly what is about to be removed and you approve it. Automatic
   delete options in tools (`icloudpd --auto-delete`, `--keep-icloud-recent-days`) stay off.
 
-### Google ingest (planned)
+### Google ingest (built, 10 Oct)
 
-Google Takeout zips go into `originals/google/` unopened. `immich-go` can read
-the zips directly and uses Google's JSON sidecar files for dates and locations.
-All parts of a Takeout must be present or metadata is lost.
+The Takeout zips sit in `photo-archive/takeout-zips/`, untouched. The four parts hold
+84,233 entries and about 188 GiB: photos in `Takeout/Google Photos/Photos from YYYY/`,
+`Archive/` and a few albums (`2-25-14`, `Sand and sea`, `Failed Videos`, ...), each photo with
+a JSON sidecar. Facts from the real export (part 1: 13,833 media files, 19,991 JSON files;
+sidecars are not always in the same part as their photo, so all four parts are unpacked
+into one tree):
+
+- Sidecars are `<file>.supplemental-metadata.json`. About 11% have truncated names, and
+  duplicates are numbered `IMG.jpg.supplemental-metadata(1).json` for `IMG(1).jpg`.
+  `-edited` copies have no sidecar of their own and use the original's.
+- The sidecar carries `photoTakenTime.timestamp` (Unix time, UTC), GPS, description and the
+  Google Photos URL. Zip file dates are the export date (9 Oct 2026), so they are useless.
+- Pixel motion photos export an extra `.MP` file (the video), not indexed yet.
+
+Flow: unpack all zips into `photo-archive/takeout-unpacked/` (outside `originals/`), then
+`scripts/import_takeout.py` (dry run by default, `--apply` to do it) matches each photo to its
+sidecar, MOVES the photo into `originals/google/<same folder>/` (a rename on the same disk, no
+second copy), and moves the sidecar next to it under the canonical name. Album copies that
+are byte-identical to a year-folder photo are skipped and left in staging. Nothing is deleted
+or overwritten; re-runs are safe. `scan_archive.py` then reads the sidecar for photos with no
+EXIF date (`date_source = google`). The date priority is: `exif`, `google`, `filename`,
+`folder`, `mtime`.
 
 ### Immich (planned)
 

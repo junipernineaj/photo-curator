@@ -8,7 +8,7 @@ nothing is deleted from iCloud or the server until the archive has been checked.
 ```
 /media/aj9/Juniper13/photo-archive/
   originals/apple/     # icloudpd output (year/month folders), never edited
-  originals/google/    # Takeout zips, untouched
+  originals/google/    # unpacked Takeout photos with JSON sidecars (zips are in takeout-zips/)
   originals/scans/     # scanned prints
 ```
 

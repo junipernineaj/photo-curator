@@ -157,7 +157,7 @@ originals/
   exports/photos-library-copy/   osxphotos export from "Photos Library copy.photoslibrary"
   _apple-libraries-raw/          the raw .photoslibrary packages, parked, not indexed
   apple/                         icloudpd download (waiting on Apple's indexing)
-  google/                        Takeout zips (requested, waiting)
+  google/                        unpacked Google Takeout photos plus JSON sidecars (see "Google Takeout import")
 ```
 
 ## Apple Photos library export (osxphotos, on the Mac)
@@ -259,6 +259,39 @@ files dated 2021 or 2022 that were not). Android and WhatsApp names carry the re
 `folder`, in seconds, without re-scanning any photo. Names without a date (iPhone
 `IMG_4865.JPG`, UUID names such as `…_4_5005_c.jpeg`, Facebook downloads) stay as they are;
 fix those in the app, or leave them marked with the amber "?".
+
+## Google Takeout import
+
+The four zips live in `photo-archive/takeout-zips/` (outside `originals/`). On the Mac, copy
+them over with `caffeinate -d rsync -avh --partial --progress ~/Downloads/takeout-*.zip
+aj9@192.168.1.40:/media/aj9/Juniper13/photo-archive/takeout-zips/`, then on the server check
+every zip: `for z in takeout-*.zip; do echo "== $z"; unzip -tq "$z" | tail -1; done`.
+
+```
+# 1. unpack ALL parts into one staging tree (outside originals/; run in tmux; 30 to 60 min)
+mkdir -p /media/aj9/Juniper13/photo-archive/takeout-unpacked
+cd /media/aj9/Juniper13/photo-archive/takeout-unpacked
+for z in ../takeout-zips/takeout-*.zip; do echo "== $z"; unzip -q -o "$z"; done
+
+# 2. look before you move: counts, unmatched sidecars, album copies (report file lists them all)
+cd ~/photo-curator && git pull
+scripts/import_takeout.py
+
+# 3. move into originals/google/ (a rename on the same disk; nothing deleted or overwritten)
+scripts/import_takeout.py --apply
+
+# 4. index it, then fingerprint
+scripts/scan_archive.py
+~/venvs/curator/bin/python scripts/find_similar.py
+```
+
+The full report is `photo-archive/takeout-import-report.txt`: media without a sidecar, JSON
+matching no photo, other files left alone, album copies skipped, name clashes. What the dry
+run shows is what `--apply` will do. After applying, staging holds only what was not
+imported (skipped album copies, unused sidecars); delete it only once the archive is backed up.
+Dates: a photo with no EXIF date takes its date from the sidecar (`Date from Google Photos`
+in the app's date-source filter). Keep the Google account's photos until the archive has a
+second copy; Google's trash keeps deleted items 60 days.
 
 ## Run the browse app
 
@@ -411,7 +444,7 @@ Never delete a source folder until all of these are done, in this order:
 - Finish the first trial download and confirm Live Photo pairing and folder layout.
 - Run the full Apple pull and verify counts.
 - Run the scan on the archive and review the report (dates, duplicates, Live Photo pairs).
-- Google Takeout requested 9 Oct 11:11; download all parts when Google emails.
+- Google Takeout: unpack, dry-run and apply `import_takeout.py`, scan, similar pass (see "Google Takeout import").
 - Finish the Mac download, export, rsync and scan; check the Live pairs and counts against Photos.
 - Run `find_similar.py` over the whole archive and review the Similar page.
 - Finish the `Pictures` import (main folder plus the two package `originals/` folders), rescan,
