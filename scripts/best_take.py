@@ -152,6 +152,11 @@ def group_members(sim, gid):
 def make(archive, out_dir, members, log=print):
     for m in members:
         m["closed"] = sum(1 for f in m["faces"] if f["e"] == "closed")
+    seen = sum(len(m["faces"]) for m in members)
+    if seen >= 3 and sum(m["closed"] for m in members) > 0.7 * seen:
+        log(f"Not trusting the eye data here: {sum(m['closed'] for m in members)} of {seen} faces are marked "
+            "closed, which usually means the model could not see the eyes (sunglasses, looking down, tiny faces).")
+        return None
     base_m = min(members, key=lambda m: (m["closed"], -m["sharp"]))
     base, exif = load(archive, base_m["path"])
     h, w = base.shape[:2]
