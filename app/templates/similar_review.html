@@ -54,10 +54,10 @@ photos, or <b>Decide later</b> to come back to a group. Nothing is recorded unti
       <span class="muted small">· {% if g.sources %}in {{ g.sources | join(' + ') }} · {% endif %}{{ g.span | span }}{% if g.decided %} · decided{% endif %}</span></h3>
     <div class="cards">
       {% for m in g.members %}
-      <div class="card" data-path="{{ m.path }}">
+      <div class="card" data-path="{{ m.path }}" data-id="{{ m.id }}" data-info="{{ m.src_label }} · {% if m.width %}{{ m.width }}×{{ m.height }} · {% endif %}{{ m.size | human }}{% if m.sharp is not none %} · sharp {{ m.sharp | round | int }}{% endif %}">
         <input type="hidden" name="m{{ g.id }}" value="{{ m.path }}">
+        <img class="thumbimg" loading="lazy" src="/thumb/{{ m.id }}" alt="{{ m.path }}" title="Click to look closer">
         <label class="pick">
-          <img loading="lazy" src="/thumb/{{ m.id }}" alt="{{ m.path }}">
           <span class="radio"><input type="radio" name="pick{{ g.id }}" value="{{ m.path }}" {% if g.chosen == m.path %}checked{% endif %}>
             <b class="keeptxt">Keep</b><b class="droptxt">Discard</b></span>
         </label>
@@ -74,6 +74,7 @@ photos, or <b>Decide later</b> to come back to a group. Nothing is recorded unti
       {% endfor %}
     </div>
     <p class="small">
+      <button type="button" class="lookbtn">Look closer (compare)</button> &nbsp;
       <label><input type="radio" name="pick{{ g.id }}" value="all" {% if g.chosen == 'all' %}checked{% endif %}> Keep all (different photos)</label>
       &nbsp; <label><input type="radio" name="pick{{ g.id }}" value="later"> Decide later</label>
     </p>
@@ -89,6 +90,73 @@ photos, or <b>Decide later</b> to come back to a group. Nothing is recorded unti
 {% endif %}
 <p class="pager">{% if prev_url %}<a href="{{ prev_url }}">&larr; Previous</a>{% endif %}
   {% if next_url %}<a href="{{ next_url }}">Next &rarr;</a>{% endif %}</p>
+<div id="viewer" hidden>
+  <div class="vtop"><span id="vcap"></span>
+    <span class="vbtns"><button type="button" id="vkeep">Keep this one (K)</button>
+      <button type="button" id="vprev">&larr;</button><button type="button" id="vnext">&rarr;</button>
+      <button type="button" id="vclose">Close (Esc)</button></span></div>
+  <div id="vscroll"><img id="vimg" alt=""></div>
+  <div id="vstrip"></div>
+  <p class="vhint">Click the picture to zoom to full detail and click again to fit. &larr; &rarr; switch photo · K keep this one · Esc close.</p>
+</div>
+<script>
+(function () {
+  var ov = document.getElementById('viewer'), img = document.getElementById('vimg'),
+      sc = document.getElementById('vscroll'), strip = document.getElementById('vstrip'),
+      cap = document.getElementById('vcap'), cards = [], idx = 0;
+  function radio(c) { return c.querySelector('input[type=radio]'); }
+  function status(c) { return c.classList.contains('drop') ? 'DISCARD' : (radio(c).checked ? 'KEEP' : ''); }
+  function show() {
+    var c = cards[idx];
+    img.className = ''; img.src = '/preview/' + c.dataset.id;
+    cap.textContent = (idx + 1) + ' of ' + cards.length + ' · ' + c.dataset.info + ' · ' + status(c);
+    document.getElementById('vkeep').disabled = radio(c).checked;
+    [].forEach.call(strip.children, function (t, i) { t.classList.toggle('cur', i === idx);
+      t.classList.toggle('dropped', cards[i].classList.contains('drop')); });
+    [idx - 1, idx + 1].forEach(function (i) { if (cards[i]) (new Image()).src = '/preview/' + cards[i].dataset.id; });
+    sc.scrollTop = sc.scrollLeft = 0;
+  }
+  function open(card) {
+    cards = [].slice.call(card.closest('.rvgroup').querySelectorAll('.card'));
+    idx = cards.indexOf(card);
+    strip.innerHTML = '';
+    cards.forEach(function (c, i) {
+      var t = document.createElement('img'); t.src = '/thumb/' + c.dataset.id;
+      t.onclick = function () { idx = i; show(); }; strip.appendChild(t);
+    });
+    ov.hidden = false; document.body.style.overflow = 'hidden'; show();
+  }
+  function close() { ov.hidden = true; document.body.style.overflow = ''; img.removeAttribute('src'); }
+  function step(d) { idx = (idx + d + cards.length) % cards.length; show(); }
+  function keep() {
+    var r = radio(cards[idx]); r.checked = true; r.dispatchEvent(new Event('change', {bubbles: true})); show();
+  }
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('.thumbimg, .lookbtn');
+    if (!t) return;
+    open(t.classList.contains('lookbtn') ? t.closest('.rvgroup').querySelector('.card') : t.closest('.card'));
+  });
+  img.addEventListener('click', function (e) {
+    var zoomed = img.classList.toggle('zoom');
+    if (zoomed) { var r = img.getBoundingClientRect();
+      sc.scrollLeft = (e.clientX - r.left) / r.width * img.scrollWidth - sc.clientWidth / 2;
+      sc.scrollTop = (e.clientY - r.top) / r.height * img.scrollHeight - sc.clientHeight / 2; }
+  });
+  document.getElementById('vkeep').onclick = keep;
+  document.getElementById('vprev').onclick = function () { step(-1); };
+  document.getElementById('vnext').onclick = function () { step(1); };
+  document.getElementById('vclose').onclick = close;
+  document.addEventListener('keydown', function (e) {
+    if (ov.hidden) return;
+    if (e.key === 'Escape') close();
+    else if (e.key === 'ArrowLeft') step(-1);
+    else if (e.key === 'ArrowRight') step(1);
+    else if (e.key === 'k' || e.key === 'K') keep();
+    else return;
+    e.preventDefault();
+  });
+})();
+</script>
 <script>
 document.querySelectorAll('.rvgroup').forEach(function (g) {
   function upd() {

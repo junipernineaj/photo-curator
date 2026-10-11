@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ r.path }} · Photo Curator{% endblock %}
 {% block content %}
-<p class="crumbs"><a href="javascript:history.back()">&larr; Back</a></p>
+<p class="crumbs"><a href="/" onclick="if (history.length > 1) { history.back(); return false; }">&larr; Back</a></p>
 <div class="detail">
   <div class="viewer">
     {% if r.kind == 'video' %}
