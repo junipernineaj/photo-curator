@@ -362,3 +362,6 @@ were checked against the log. `scripts/backup.sh` (database snapshots, no-delete
 including April 2011. 61 GoPro `.LRV`/`.THM` previews kept in `_gopro-proxies` (the full videos no longer exist).
 `Pictures` and `AGGREGATED-Photos` verified safe for photos and videos. Location sample: 43% of pictures carry GPS.
 Built the Map (scan `--regeo`, Takeout location files, Leaflet map with server-side grouping, bbox filter on Photos).
+
+**Decision (11 Oct, Tony): in the near-duplicate Review page, when copies tie on keeper score, the copy with a GPS location wins.**
+If the kept copy has no location but a rejected copy does, the page offers to carry the location across (stored in the edits file).
