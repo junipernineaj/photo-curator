@@ -51,10 +51,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from PIL import Image  # noqa: E402
 from app import similar, thumbs  # noqa: E402
 
-MODEL_TAG = "/faces-v3"        # stored with the model name; bump to redo everything after a method change
-FIND_PROMPT = ("Locate every human face in the image, including small faces in the background. "
+MODEL_TAG = "/faces-v4"        # stored with the model name; bump to redo everything after a method change
+FIND_PROMPT = ("Locate the head of every person in the image, including small people in the background. "
+               "Box the face and hair only, not the neck, body or legs. "
                "Output the bounding box of each face in JSON, like "
-               "[{\"bbox_2d\": [x1, y1, x2, y2], \"label\": \"face\"}]. Output [] if there are no people.")
+               "[{\"bbox_2d\": [x1, y1, x2, y2], \"label\": \"head\"}]. Output [] if there are no people.")
 EYE_PROMPT = ("This is a close-up of one person's face. Look carefully at their eyes. "
               "Are the eyes open (you can see the eyeballs) or closed (lids shut, or mid-blink)? "
               "Answer with one word: OPEN, CLOSED or UNCLEAR (use UNCLEAR if the face is blurry, hidden, "
@@ -136,6 +137,9 @@ def find_faces(url, model, im):
              min(max(fx(max(x1, x2)), 0), 1), min(max(fy(max(y1, y2)), 0), 1)]
         if b[2] - b[0] < 0.005 or b[3] - b[1] < 0.005 or (b[2] - b[0]) * (b[3] - b[1]) > 0.5:
             continue                                      # nothing, or implausibly huge
+        bw, bh = (b[2] - b[0]) * w, (b[3] - b[1]) * h
+        if bh > 1.3 * bw:                                 # the model boxed the whole person: the head is at the top
+            b[3] = min(1.0, b[1] + 1.15 * bw / h)
         if any(iou(b, o) > 0.5 for o in boxes):
             continue                                      # the same face again
         boxes.append(b)
