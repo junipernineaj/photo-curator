@@ -187,6 +187,7 @@ def ask(url, model, jpeg_path):
 
 
 def main():
+    sys.stdout.reconfigure(line_buffering=True)      # show progress at once, even when redirected to a file
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--archive", default=os.environ.get("ARCHIVE", "/media/aj9/Juniper13/photo-archive/originals"))
     ap.add_argument("--model")
