@@ -511,3 +511,15 @@ and in the backup. Retention is 30 days (`RETENTION_DAYS` in `app/dupes.py`).
 
 Held back, never offered: copies where both have different hand-set dates, and Live Photo halves whose partner has no
 matching copy. The Juniper12 backup uses no `--delete`, so it keeps the old paths too; prune it only after a purge.
+
+### Backing up the archive (`scripts/backup.sh`)
+
+One command for the second disk. `scripts/backup.sh` is a dry run (shows what would copy, plus free space);
+`scripts/backup.sh --apply` takes dated integrity-checked snapshots of the three SQLite files into
+`Juniper12/photo-archive-backup/snapshots/`, then rsyncs the archive with no `--delete` (excluding `thumbs/`,
+`takeout-unpacked/`, `takeout-zips/`), and writes `LAST_BACKUP.txt` and a log `~/backup-<time>.log`.
+Add `--verify` for a full checksum comparison (about an hour); it must say VERIFIED. If it reports differences
+(same size and date but different content, such as bit rot), repair with the printed command without `-n`:
+`rsync -avhc --partial <excludes> SRC/ DST/`. Because nothing is ever deleted on the backup, files moved to
+`_quarantine` or parked appear there twice (old and new path) until you prune the backup after a purge.
+Run it after each batch of quarantine moves and before any retirement of an old source folder.
