@@ -417,6 +417,21 @@ By default only burst groups are checked (one source, shot within 10 seconds), b
 have the same eyes; `--only all` does every group.  Photos are done in the order the Review page shows them.  Results are in `curator_similar.sqlite`
 (table `vision`), so they survive a re-run of find_similar.py.
 
+### Best Take (prototype, scripts/best_take.py)
+
+Builds one picture from a burst in which everyone's eyes are open, using the head boxes and eye states from
+`vision_check.py`: the frame with the fewest closed eyes is the base, other frames are lined up with it, and
+each head with closed eyes is replaced by the same person's head from a frame where the eyes are open.
+Real pixels only; nothing is generated.  Originals are never touched; results go in `<archive>/derived/best-take/`.
+
+    ~/venvs/curator/bin/pip install opencv-python-headless    # once
+    scripts/best_take.py --list                # groups with eye data and at least one closed eye
+    scripts/best_take.py --group 4321          # group numbers are on the Review page headings
+
+It writes `NAME_besttake.jpg`, `NAME_compare.jpg` (before | after, swapped heads outlined) and a `.json` of
+where each head came from.  View them at `http://SERVER:8090/derived/best-take/NAME_compare.jpg`.
+Limits: people who moved between frames, hair against background, and loose head boxes give visible seams.
+
 ## Bringing in an old photo folder, and retiring it
 
 Old backup folders found on other disks (for example `/media/aj9/Juniper13/Pictures`, 53GB)

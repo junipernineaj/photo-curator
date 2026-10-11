@@ -32,6 +32,8 @@ THUMBS = os.environ.get("THUMBS", os.path.join(os.path.dirname(ARCHIVE), "thumbs
 EDITS = os.environ.get("EDITS", os.path.join(os.path.dirname(ARCHIVE), "curator_edits.sqlite"))
 # Near-duplicate groups (derived data from scripts/find_similar.py; safe to delete and rebuild).
 SIM = os.environ.get("SIM", os.path.join(os.path.dirname(ARCHIVE), "curator_similar.sqlite"))
+# Pictures made FROM your photos (Best Take composites). Never inside originals/, never indexed as originals.
+DERIVED = os.path.realpath(os.environ.get("DERIVED", os.path.join(os.path.dirname(ARCHIVE), "derived")))
 PAGE_SIZE = 96
 
 EDITS_SCHEMA = """
@@ -384,6 +386,15 @@ def image_response(db, fid, kind):
            f'<text x="50%" y="50%" fill="#8b93a1" font-family="sans-serif" font-size="28" '
            f'text-anchor="middle" dominant-baseline="middle">{label}</text></svg>')
     return Response(svg, media_type="image/svg+xml", headers={"Cache-Control": "no-store"})
+
+
+@app.get("/derived/{rel:path}")
+def derived_file(rel: str):
+    """View a picture made by scripts/best_take.py (read-only)."""
+    p = os.path.realpath(os.path.join(DERIVED, rel))
+    if not p.startswith(DERIVED + os.sep) or not os.path.isfile(p):
+        raise HTTPException(404, "Not found")
+    return FileResponse(p, headers={"Cache-Control": "no-store"})
 
 
 @app.get("/annotated/{fid}")
