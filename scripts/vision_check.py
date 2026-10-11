@@ -12,6 +12,7 @@ to it, on localhost.  Results go in curator_similar.sqlite (derived data; safe t
   scripts/vision_check.py --list-models          # which models Ollama has
   scripts/vision_check.py --limit 20             # try 20 photos first and print what it says
   scripts/vision_check.py                        # all photos in groups you have not decided yet
+  scripts/vision_check.py --match 2017_07_29     # only photos with this text in their path
   scripts/vision_check.py --all                  # include groups already decided
   scripts/vision_check.py --model qwen2.5vl:7b   # choose the model (default: first vision model found)
 
@@ -34,10 +35,11 @@ from datetime import datetime
 VENV_PY = os.path.expanduser(os.environ.get("CURATOR_VENV", "~/venvs/curator") + "/bin/python")
 try:
     import PIL  # noqa: F401
+    import pillow_heif  # noqa: F401   (iPhone HEIC photos need it; without it previews silently fail)
 except ImportError:
     if os.path.exists(VENV_PY) and os.path.realpath(sys.executable) != os.path.realpath(VENV_PY):
         os.execv(VENV_PY, [VENV_PY] + sys.argv)
-    sys.exit("Pillow is missing. Run: python3 -m venv ~/venvs/curator && "
+    sys.exit("Pillow and pillow-heif are needed. Run: python3 -m venv ~/venvs/curator && "
              "~/venvs/curator/bin/pip install -r requirements.txt")
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
@@ -100,6 +102,7 @@ def main():
     ap.add_argument("--list-models", action="store_true")
     ap.add_argument("--all", action="store_true", help="include groups you have already decided")
     ap.add_argument("--limit", type=int, default=0, help="look at at most N photos, and print each answer")
+    ap.add_argument("--match", help="only photos whose path contains this text (e.g. 2017_07_29)")
     ap.add_argument("--workers", type=int, default=1, help="requests at once (1 is fine; try 2 on a big GPU)")
     ap.add_argument("--retry", action="store_true", help="try earlier failures again")
     a = ap.parse_args()
@@ -146,6 +149,8 @@ def main():
             h = have.get(p)
             fid, _, ext, size, mtime = info[p]
             if h and h[:3] == (size, mtime, model) and (h[3] == "ok" or not a.retry):
+                continue
+            if a.match and a.match.lower() not in p.lower():
                 continue
             todo.append(info[p])
     if a.limit:

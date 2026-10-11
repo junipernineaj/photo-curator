@@ -18,6 +18,7 @@ import sys
 VENV_PY = os.path.expanduser(os.environ.get("CURATOR_VENV", "~/venvs/curator") + "/bin/python")
 try:
     import PIL  # noqa: F401
+    import pillow_heif  # noqa: F401   (without it iPhone HEIC thumbnails silently fail)
 except ImportError:
     if os.path.exists(VENV_PY) and os.path.realpath(sys.executable) != os.path.realpath(VENV_PY):
         os.execv(VENV_PY, [VENV_PY] + sys.argv)
