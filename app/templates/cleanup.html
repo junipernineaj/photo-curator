@@ -7,6 +7,8 @@ byte-identical files. One copy of each is always kept. This page never moves any
 then run <code>scripts/quarantine.py</code> on the server. Moved files go to a quarantine folder for
 {{ retention }} days and can be put back.</p>
 {% if msg %}<p class="notice">{{ msg }}</p>{% endif %}
+<p class="notice"><b>In quarantine now: {{ q_bytes | human }}</b> in {{ "{:,}".format(q_n) }} files.
+  <span class="muted">Nothing is freed on the disk until a batch is purged (after {{ retention }} days).</span></p>
 
 <h2>Rules ({{ total_bytes | human }} could be freed)</h2>
 <p class="muted small">Each row: keep the copy in one source, quarantine the identical copy in another.
@@ -44,12 +46,17 @@ Start small: look at examples, approve 100, run the script, check the result, th
 {% endif %}
 
 <h2>Quarantine batches</h2>
-<table class="cl"><thead><tr><th>Batch</th><th>Files</th><th>Size</th><th>Restored</th><th>Purged</th><th>Purge allowed</th></tr></thead><tbody>
+<table class="cl"><thead><tr><th>Batch</th><th>Files</th><th>Size moved</th><th>In quarantine now</th><th>Restored</th><th>Purged</th><th>Purge allowed</th></tr></thead><tbody>
 {% for b in batches %}
 <tr><td class="mono">{{ b.batch }}</td><td class="num">{{ "{:,}".format(b.n) }}</td><td class="num">{{ (b.bytes or 0) | human }}</td>
+  <td class="num">{{ (b.held_bytes or 0) | human }}</td>
   <td class="num">{{ b.restored }}</td><td class="num">{{ b.purged }}</td>
   <td>{% if b.left <= 0 %}now{% else %}in {{ b.left | round(1) }} days{% endif %}</td></tr>
-{% else %}<tr><td colspan="6">Nothing quarantined yet.</td></tr>{% endfor %}
+{% else %}<tr><td colspan="7">Nothing quarantined yet.</td></tr>{% endfor %}
+{% if batches %}<tr><th>Total</th><td class="num"><b>{{ "{:,}".format(batches | sum(attribute="n")) }}</b></td>
+  <td class="num"><b>{{ (batches | sum(attribute="bytes")) | human }}</b></td>
+  <td class="num"><b>{{ q_bytes | human }}</b></td><td class="num">{{ batches | sum(attribute="restored") }}</td>
+  <td class="num">{{ batches | sum(attribute="purged") }}</td><td></td></tr>{% endif %}
 </tbody></table>
 <p class="muted small">At the server: <code>scripts/quarantine.py</code> (dry run), <code>--apply</code>,
 <code>--status</code>, <code>--restore BATCH [--apply]</code>, <code>--purge BATCH [--apply]</code>.

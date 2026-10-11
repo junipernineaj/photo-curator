@@ -369,6 +369,11 @@ def do_status(archive):
         state = "purgeable now" if left <= 0 else f"{left:.1f} days until purgeable"
         print(f"{r['batch']}: {r['n']} files, {(r['b'] or 0) / 1e9:.2f} GB, "
               f"{r['rest']} restored, {r['pur']} purged, {state}")
+    held = ed.execute("SELECT COUNT(*), COALESCE(SUM(size), 0) FROM quarantine_log "
+                      "WHERE restored_at IS NULL AND purged_at IS NULL").fetchone()
+    if rows:
+        print(f"\nIn quarantine now: {held[0]:,} files, {held[1] / 1e9:.2f} GB "
+              "(not yet freed on the disk; that happens only when a batch is purged)")
 
 
 def main():

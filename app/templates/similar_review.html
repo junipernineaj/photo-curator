@@ -18,6 +18,7 @@
 (restorable for 30 days; nothing is deleted). The suggestion is preselected: the biggest picture, then the one
 with a location, then a Live Photo, then the sharpest. If the vision check has run, fewer closed eyes come first. Choose <b>Keep all</b> if they are genuinely different
 photos, or <b>Decide later</b> to come back to a group. Nothing is recorded until you press Save.</p>
+<p class="small muted">Quarantine now holds {{ q_bytes | human }} in {{ "{:,}".format(q_n) }} files.</p>
 <p class="count">{{ "{:,}".format(done) }} of {{ "{:,}".format(total) }} groups decided
   <span class="muted">· {{ "{:,}".format(shown) }} in this list</span></p>
 <form class="filters" method="get" action="/similar/review">

@@ -454,6 +454,13 @@ def dups(request: Request, db=Depends(get_db)):
 
 # ---- exact-duplicate clean-up (the page only records approvals; scripts/quarantine.py moves files) ----
 
+def quarantine_held(db):
+    """(files, bytes) sitting in quarantine right now: moved, and neither restored nor purged."""
+    r = db.execute("SELECT COUNT(*), COALESCE(SUM(size), 0) FROM ed.quarantine_log "
+                   "WHERE restored_at IS NULL AND purged_at IS NULL").fetchone()
+    return r[0], r[1]
+
+
 @app.get("/cleanup", response_class=HTMLResponse)
 def cleanup(request: Request, db=Depends(get_db)):
     plan = dupes_mod.build_plan(db)
@@ -471,6 +478,8 @@ def cleanup(request: Request, db=Depends(get_db)):
     batches = []
     for b in db.execute(
             "SELECT batch, COUNT(*) n, SUM(size) bytes, MAX(moved_at) last, "
+            "SUM(restored_at IS NULL AND purged_at IS NULL) held_n, "
+            "SUM(CASE WHEN restored_at IS NULL AND purged_at IS NULL THEN size ELSE 0 END) held_bytes, "
             "SUM(restored_at IS NOT NULL) restored, SUM(purged_at IS NOT NULL) purged "
             "FROM ed.quarantine_log GROUP BY batch ORDER BY batch DESC"):
         d = dict(b)
@@ -478,6 +487,7 @@ def cleanup(request: Request, db=Depends(get_db)):
         batches.append(d)
     return templates.TemplateResponse(request, "cleanup.html", {
         "rows": rows, "held": held, "batches": batches, "groups": plan["groups"],
+        "q_n": quarantine_held(db)[0], "q_bytes": quarantine_held(db)[1],
         "victims": plan["victims"], "total_bytes": sum(r["bytes"] for r in rows),
         "retention": dupes_mod.RETENTION_DAYS, "msg": request.query_params.get("msg", "")})
 
@@ -724,6 +734,7 @@ def similar_review(request: Request, db=Depends(get_db), kind: str = "", view: s
     q = urlencode({k: v for k, v in f.items() if v})
     nxt = start + len(gids)
     return templates.TemplateResponse(request, "similar_review.html", {
+        "q_n": quarantine_held(db)[0], "q_bytes": quarantine_held(db)[1],
         "groups": groups, "f": f, "built": built[0] if built else None, "shown": shown, "start": start,
         "pend_n": pend[0], "pend_bytes": pend[1], "total": total, "done": done, "msg": msg,
         "back": "/similar/review?" + q,
