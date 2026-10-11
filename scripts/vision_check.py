@@ -55,14 +55,12 @@ MODEL_TAG = "/faces-v2"        # stored with the model name; bump to redo everyt
 FIND_PROMPT = ("Locate every human face in the image, including small faces in the background. "
                "Output the bounding box of each face in JSON, like "
                "[{\"bbox_2d\": [x1, y1, x2, y2], \"label\": \"face\"}]. Output [] if there are no people.")
-EYES_PROMPT = ("Each image is one person's face, in order. For each one say: eyes = 'open' or 'closed' "
-               "(closed includes mid-blink; use 'unclear' if the face is blurry, hidden, turned away or too "
-               "small to tell), and looking = 'camera' if they look towards the camera or 'away'. "
-               "Return JSON: {\"people\": [{\"eyes\": ..., \"looking\": ...}]} with exactly one entry per image.")
-EYES_SCHEMA = {"type": "object", "properties": {"people": {"type": "array", "items": {
-    "type": "object", "properties": {"eyes": {"type": "string", "enum": ["open", "closed", "unclear"]},
-                                     "looking": {"type": "string", "enum": ["camera", "away"]}},
-    "required": ["eyes", "looking"]}}}, "required": ["people"]}
+EYES_PROMPT = ("The images are the faces of different people, numbered 1, 2, 3... in the order given. "
+               "For each person, answer on its own line in exactly this form: "
+               "<number>: <open|closed|unclear>, <camera|away>. "
+               "'closed' includes mid-blink; 'unclear' if the face is blurry, hidden, turned away or too small "
+               "to tell; 'camera' if they look towards the camera, 'away' if not. No other text.")
+LINE_RE = re.compile(r"(\d+)\D{0,4}?(open|closed|unclear)\W+(camera|away)", re.I)
 MAX_FACES = 12          # judge the biggest faces only
 MIN_FACE_PX = 32        # smaller than this (in the 1600px preview) is too small to judge
 SEND_LONG = 1400        # long side sent for face finding; a multiple of 28 so the model's coordinates match
@@ -71,8 +69,11 @@ SEND_LONG = 1400        # long side sent for face finding; a multiple of 28 so t
 def ollama(url, path, body=None, timeout=240):
     req = urllib.request.Request(url.rstrip("/") + path, data=None if body is None else json.dumps(body).encode(),
                                  headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.load(r)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.load(r)
+    except urllib.error.HTTPError as e:
+        raise OSError(f"HTTP {e.code}: {e.read().decode('utf-8', 'replace')[:200]}") from None
 
 
 def pick_model(url, wanted):
@@ -159,13 +160,11 @@ def judge_faces(url, model, im, boxes):
         crops.append(jpeg_bytes(c))
         idx.append(i)
     if crops:
-        try:
-            d = json.loads(chat(url, model, EYES_PROMPT, crops, EYES_SCHEMA, num_predict=60 * len(crops) + 60)).get("people", [])
-        except ValueError:
-            d = []                                        # unreadable answer: leave these as unclear
-        if len(d) == len(crops):
-            for i, p in zip(idx, d):
-                out[i] = (p.get("eyes", "unclear"), p.get("looking", "camera"))
+        text = chat(url, model, EYES_PROMPT, crops, None, num_predict=24 * len(crops) + 40)
+        for n, eyes, look in LINE_RE.findall(text):
+            k = int(n) - 1
+            if 0 <= k < len(idx):
+                out[idx[k]] = (eyes.lower(), look.lower())
     return out
 
 
