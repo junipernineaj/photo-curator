@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS vision (            -- what a local vision model said
   status TEXT NOT NULL,                         -- ok | failed
   faces INTEGER, eyes_closed INTEGER, looking_away INTEGER,
   note TEXT,
+  detail TEXT,                                  -- JSON list of faces: box (fractions of the image), eyes, looking
   seen_at TEXT NOT NULL
 );
 """
@@ -57,7 +58,7 @@ def init_sim(path):
     con = sqlite3.connect(path)
     con.executescript(SIM_SCHEMA)
     # Upgrade files made by the first version of this tool.
-    for table, col, ddl in (("hashes", "sharp", "REAL"),
+    for table, col, ddl in (("hashes", "sharp", "REAL"), ("vision", "detail", "TEXT"),
                             ("sim_group", "is_sharpest", "INTEGER NOT NULL DEFAULT 0")):
         have = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
         if col not in have:

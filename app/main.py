@@ -6,6 +6,8 @@ Env:  ARCHIVE (originals folder), DB (index file), THUMBS (cache folder)
 It never modifies, moves or deletes a photo: the index is opened read-only and
 originals are only streamed back. Thumbnails are written to THUMBS.
 """
+import io
+import json
 import mimetypes
 import os
 import sqlite3
@@ -382,6 +384,28 @@ def image_response(db, fid, kind):
            f'<text x="50%" y="50%" fill="#8b93a1" font-family="sans-serif" font-size="28" '
            f'text-anchor="middle" dominant-baseline="middle">{label}</text></svg>')
     return Response(svg, media_type="image/svg+xml", headers={"Cache-Control": "no-store"})
+
+
+@app.get("/annotated/{fid}")
+def annotated(fid: int, db=Depends(get_db)):
+    """The preview with the faces the vision check found outlined: green eyes open, red closed, grey unclear."""
+    from PIL import Image, ImageDraw
+    row = get_row(db, fid)
+    v = db.execute("SELECT detail FROM sim.vision WHERE path = ? AND status = 'ok'", (row["path"],)).fetchone()
+    out = thumbs.get_or_make(THUMBS, fid, safe_abs(row["path"]), row["ext"], row["kind"] == "video", "preview")
+    if not out:
+        raise HTTPException(404, "No preview")
+    im = Image.open(out).convert("RGB")
+    w, h = im.size
+    d = ImageDraw.Draw(im)
+    colours = {"open": (60, 200, 90), "closed": (229, 72, 77), "unclear": (170, 170, 170)}
+    for f in (json.loads(v[0]) if v and v[0] else []):
+        b = f["b"]
+        d.rectangle([b[0] * w, b[1] * h, b[2] * w, b[3] * h], outline=colours.get(f["e"], (170, 170, 170)),
+                    width=max(3, w // 300))
+    buf = io.BytesIO()
+    im.save(buf, "JPEG", quality=85)
+    return Response(buf.getvalue(), media_type="image/jpeg", headers={"Cache-Control": "no-store"})
 
 
 @app.get("/thumb/{fid}")

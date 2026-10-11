@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Ask a local vision model (Ollama, e.g. Qwen-VL) about the people in near-duplicate photos.
 
-For each photo in a near-duplicate group it records how many faces are visible, how many people
-have their eyes closed, how many are looking away, and a short note (motion blur, mid-sentence...).
+For each photo in a near-duplicate group it works in two steps, because asking about a whole group
+photo at once over-counts faces and misses blinks: (1) the model finds each face and gives a box,
+(2) each face is cropped and the model says whether the eyes are open or closed and whether the person
+faces the camera.  It records faces, eyes closed, looking away and the face boxes (so the Review page
+can outline them: red = eyes closed).
 The Review page shows this on each card and prefers the frame with the fewest closed eyes.
 Advice only: it never changes a photo, and you still pick.
 
@@ -22,6 +25,7 @@ Env: OLLAMA_URL (default http://127.0.0.1:11434), ARCHIVE, DB, THUMBS, SIM, EDIT
 """
 import argparse
 import base64
+import io
 import json
 import os
 import sqlite3
@@ -43,23 +47,31 @@ except ImportError:
              "~/venvs/curator/bin/pip install -r requirements.txt")
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+from PIL import Image  # noqa: E402
 from app import similar, thumbs  # noqa: E402
 
-PROMPT = (
-    "Look at the people in this photo and answer as JSON.\n"
-    "faces: how many human faces are clearly visible.\n"
-    "eyes_closed: how many of those people have their eyes closed or mid-blink.\n"
-    "looking_away: how many of those people are not looking towards the camera.\n"
-    "note: at most 12 words on anything that makes it a poor shot (motion blur, mouth open mid-word, "
-    "someone cut off or hidden); empty if nothing.\n"
-    "Use 0 when there are no people. Only count what you can clearly see; do not guess.")
-SCHEMA = {"type": "object",
-          "properties": {"faces": {"type": "integer"}, "eyes_closed": {"type": "integer"},
-                         "looking_away": {"type": "integer"}, "note": {"type": "string"}},
-          "required": ["faces", "eyes_closed", "looking_away", "note"]}
+MODEL_TAG = "/faces-v2"        # stored with the model name; bump to redo everything after a method change
+FIND_PROMPT = ("Detect every human face in the image, including small faces in the background. "
+               "Return JSON: {\"faces\": [{\"bbox_2d\": [x1, y1, x2, y2]}]} with pixel coordinates "
+               "of the whole head and face. Return {\"faces\": []} if there are no people.")
+FIND_SCHEMA = {"type": "object", "properties": {"faces": {"type": "array", "items": {
+    "type": "object", "properties": {"bbox_2d": {"type": "array", "items": {"type": "integer"},
+                                                 "minItems": 4, "maxItems": 4}},
+    "required": ["bbox_2d"]}}}, "required": ["faces"]}
+EYES_PROMPT = ("Each image is one person's face, in order. For each one say: eyes = 'open' or 'closed' "
+               "(closed includes mid-blink; use 'unclear' if the face is blurry, hidden, turned away or too "
+               "small to tell), and looking = 'camera' if they look towards the camera or 'away'. "
+               "Return JSON: {\"people\": [{\"eyes\": ..., \"looking\": ...}]} with exactly one entry per image.")
+EYES_SCHEMA = {"type": "object", "properties": {"people": {"type": "array", "items": {
+    "type": "object", "properties": {"eyes": {"type": "string", "enum": ["open", "closed", "unclear"]},
+                                     "looking": {"type": "string", "enum": ["camera", "away"]}},
+    "required": ["eyes", "looking"]}}}, "required": ["people"]}
+MAX_FACES = 12          # judge the biggest faces only
+MIN_FACE_PX = 32        # smaller than this (in the 1600px preview) is too small to judge
+SEND_LONG = 1400        # long side sent for face finding; a multiple of 28 so the model's coordinates match
 
 
-def ollama(url, path, body=None, timeout=180):
+def ollama(url, path, body=None, timeout=240):
     req = urllib.request.Request(url.rstrip("/") + path, data=None if body is None else json.dumps(body).encode(),
                                  headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -82,17 +94,80 @@ def pick_model(url, wanted):
     return vis[0]
 
 
-def ask(url, model, jpeg_path):
-    with open(jpeg_path, "rb") as f:
-        img = base64.b64encode(f.read()).decode()
+def jpeg_bytes(im, quality=90):
+    buf = io.BytesIO()
+    im.convert("RGB").save(buf, "JPEG", quality=quality)
+    return buf.getvalue()
+
+
+def chat(url, model, prompt, images, schema):
     out = ollama(url, "/api/chat", {
-        "model": model, "stream": False, "format": SCHEMA, "keep_alive": "30m",
-        "options": {"temperature": 0},
-        "messages": [{"role": "user", "content": PROMPT, "images": [img]}]})
-    d = json.loads(out["message"]["content"])
-    n = lambda k: max(0, int(d.get(k) or 0))
-    faces = n("faces")
-    return faces, min(n("eyes_closed"), faces), min(n("looking_away"), faces), str(d.get("note") or "")[:120]
+        "model": model, "stream": False, "format": schema, "keep_alive": "30m",
+        "options": {"temperature": 0, "num_ctx": 8192},
+        "messages": [{"role": "user", "content": prompt,
+                      "images": [base64.b64encode(i).decode() for i in images]}]})
+    return json.loads(out["message"]["content"])
+
+
+def find_faces(url, model, im):
+    """Boxes (x1,y1,x2,y2) as fractions of the image, biggest first."""
+    w, h = im.size
+    s = min(1.0, SEND_LONG / max(w, h))
+    sw, sh = max(28, round(w * s / 28) * 28), max(28, round(h * s / 28) * 28)
+    sent = im.resize((sw, sh), Image.LANCZOS)
+    d = chat(url, model, FIND_PROMPT, [jpeg_bytes(sent)], FIND_SCHEMA)
+    norm = "qwen3" in model.lower()                      # Qwen3-VL answers on a 0-1000 grid, Qwen2.5-VL in pixels
+    boxes = []
+    for f in d.get("faces", []):
+        try:
+            x1, y1, x2, y2 = (float(v) for v in f["bbox_2d"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        fx = (lambda v: v / 1000) if norm else (lambda v: v / sw)
+        fy = (lambda v: v / 1000) if norm else (lambda v: v / sh)
+        b = [min(max(fx(min(x1, x2)), 0), 1), min(max(fy(min(y1, y2)), 0), 1),
+             min(max(fx(max(x1, x2)), 0), 1), min(max(fy(max(y1, y2)), 0), 1)]
+        if b[2] - b[0] < 0.005 or b[3] - b[1] < 0.005 or (b[2] - b[0]) * (b[3] - b[1]) > 0.5:
+            continue                                      # nothing, or implausibly huge
+        boxes.append(b)
+    boxes.sort(key=lambda b: -(b[2] - b[0]) * (b[3] - b[1]))
+    return boxes
+
+
+def judge_faces(url, model, im, boxes):
+    """One call with a crop per face -> list of (eyes, looking) in box order; unclear for tiny faces."""
+    w, h = im.size
+    out, crops, idx = [("unclear", "camera")] * len(boxes), [], []
+    for i, b in enumerate(boxes):
+        bw, bh = (b[2] - b[0]) * w, (b[3] - b[1]) * h
+        if min(bw, bh) < MIN_FACE_PX:
+            continue
+        px, py = bw * 0.3, bh * 0.3
+        c = im.crop((max(0, int(b[0] * w - px)), max(0, int(b[1] * h - py)),
+                     min(w, int(b[2] * w + px)), min(h, int(b[3] * h + py))))
+        c.thumbnail((336, 336))
+        crops.append(jpeg_bytes(c))
+        idx.append(i)
+    if crops:
+        d = chat(url, model, EYES_PROMPT, crops, EYES_SCHEMA).get("people", [])
+        if len(d) == len(crops):
+            for i, p in zip(idx, d):
+                out[i] = (p.get("eyes", "unclear"), p.get("looking", "camera"))
+    return out
+
+
+def ask(url, model, jpeg_path):
+    """-> (faces, eyes_closed, looking_away, note, detail_json)"""
+    with Image.open(jpeg_path) as im0:
+        im = im0.convert("RGB")
+    boxes = find_faces(url, model, im)[:MAX_FACES]
+    states = judge_faces(url, model, im, boxes) if boxes else []
+    closed = sum(1 for e, _ in states if e == "closed")
+    away = sum(1 for e, lk in states if lk == "away")
+    unclear = sum(1 for e, _ in states if e == "unclear")
+    detail = [{"b": [round(v, 4) for v in b], "e": e, "l": lk} for b, (e, lk) in zip(boxes, states)]
+    note = f"{unclear} too small or unclear" if unclear else ""
+    return len(boxes), closed, away, note, json.dumps(detail, separators=(",", ":"))
 
 
 def main():
@@ -112,6 +187,7 @@ def main():
             print(m["name"])
         return
     model = pick_model(url, a.model)
+    tag = model + MODEL_TAG
 
     archive = os.path.realpath(a.archive)
     parent = os.path.dirname(archive)
@@ -148,7 +224,7 @@ def main():
         for p in paths:
             h = have.get(p)
             fid, _, ext, size, mtime = info[p]
-            if h and h[:3] == (size, mtime, model) and (h[3] == "ok" or not a.retry):
+            if h and h[:3] == (size, mtime, tag) and (h[3] == "ok" or not a.retry):
                 continue
             if a.match and a.match.lower() not in p.lower():
                 continue
@@ -177,15 +253,15 @@ def main():
                 now = datetime.now().isoformat(timespec="seconds")
                 if res:
                     con.execute("INSERT OR REPLACE INTO vision(path,size,mtime_ns,model,status,faces,eyes_closed,"
-                                "looking_away,note,seen_at) VALUES (?,?,?,?,'ok',?,?,?,?,?)",
-                                (path, size, mtime, model, *res, now))
+                                "looking_away,note,detail,seen_at) VALUES (?,?,?,?,'ok',?,?,?,?,?,?)",
+                                (path, size, mtime, tag, *res, now))
                     if a.limit:
-                        print(f"  {path}: faces {res[0]}, eyes closed {res[1]}, looking away {res[2]}"
-                              f"{' - ' + res[3] if res[3] else ''}")
+                        print(f"  {path} (/annotated/{fid}): faces {res[0]}, eyes closed {res[1]}, "
+                              f"looking away {res[2]}{' - ' + res[3] if res[3] else ''}")
                 else:
                     bad += 1
                     con.execute("INSERT OR REPLACE INTO vision(path,size,mtime_ns,model,status,note,seen_at) "
-                                "VALUES (?,?,?,?,'failed',?,?)", (path, size, mtime, model, err[:120], now))
+                                "VALUES (?,?,?,?,'failed',?,?)", (path, size, mtime, tag, err[:120], now))
                     print(f"  FAILED {path}: {err}")
                 done += 1
                 if done % 5 == 0:

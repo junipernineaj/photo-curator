@@ -400,7 +400,11 @@ keeper if the keeper has none.  Restore works as for exact duplicates (`--restor
 ### Who has their eyes open (scripts/vision_check.py)
 
 Uses a local vision model in your own Ollama (for example Qwen2.5-VL); photos go only to localhost.
-For each photo in a near-duplicate group it records faces seen, eyes closed, looking away and a short note.
+Two steps per photo (asking about the whole photo at once over-counted faces and missed blinks): the model
+finds each face and gives a box, then each face is cropped and judged: eyes open/closed/unclear, looking at
+the camera or away.  Faces under 32 px in the preview are too small to judge and shown as unclear.  In the
+Review viewer press **F** to outline the faces it found (green open, red closed, grey unclear), so you can see
+what it saw.  The page `/annotated/ID` shows the same for one photo.
 The Review page shows it on each card and the suggested keeper prefers the fewest closed eyes.
 It is advice: the model can miscount small faces, so look before you keep.
 
