@@ -20,7 +20,7 @@ try:
     import PIL  # noqa: F401
     import pillow_heif  # noqa: F401   (without it iPhone HEIC thumbnails silently fail)
 except ImportError:
-    if os.path.exists(VENV_PY) and os.path.realpath(sys.executable) != os.path.realpath(VENV_PY):
+    if os.path.exists(VENV_PY) and os.path.realpath(sys.prefix) != os.path.realpath(os.path.dirname(os.path.dirname(VENV_PY))):
         os.execv(VENV_PY, [VENV_PY] + sys.argv)
     sys.exit("Pillow is missing. Run: python3 -m venv ~/venvs/curator && "
              "~/venvs/curator/bin/pip install -r requirements.txt")
