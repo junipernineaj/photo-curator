@@ -28,6 +28,7 @@ import base64
 import io
 import json
 import os
+import re
 import sqlite3
 import sys
 import time
@@ -51,13 +52,9 @@ from PIL import Image  # noqa: E402
 from app import similar, thumbs  # noqa: E402
 
 MODEL_TAG = "/faces-v2"        # stored with the model name; bump to redo everything after a method change
-FIND_PROMPT = ("Detect every human face in the image, including small faces in the background. "
-               "Return JSON: {\"faces\": [{\"bbox_2d\": [x1, y1, x2, y2]}]} with pixel coordinates "
-               "of the whole head and face. Return {\"faces\": []} if there are no people.")
-FIND_SCHEMA = {"type": "object", "properties": {"faces": {"type": "array", "items": {
-    "type": "object", "properties": {"bbox_2d": {"type": "array", "items": {"type": "integer"},
-                                                 "minItems": 4, "maxItems": 4}},
-    "required": ["bbox_2d"]}}}, "required": ["faces"]}
+FIND_PROMPT = ("Locate every human face in the image, including small faces in the background. "
+               "Output the bounding box of each face in JSON, like "
+               "[{\"bbox_2d\": [x1, y1, x2, y2], \"label\": \"face\"}]. Output [] if there are no people.")
 EYES_PROMPT = ("Each image is one person's face, in order. For each one say: eyes = 'open' or 'closed' "
                "(closed includes mid-blink; use 'unclear' if the face is blurry, hidden, turned away or too "
                "small to tell), and looking = 'camera' if they look towards the camera or 'away'. "
@@ -100,13 +97,27 @@ def jpeg_bytes(im, quality=90):
     return buf.getvalue()
 
 
-def chat(url, model, prompt, images, schema):
-    out = ollama(url, "/api/chat", {
-        "model": model, "stream": False, "format": schema, "keep_alive": "30m",
-        "options": {"temperature": 0, "num_ctx": 8192},
-        "messages": [{"role": "user", "content": prompt,
-                      "images": [base64.b64encode(i).decode() for i in images]}]})
-    return json.loads(out["message"]["content"])
+def chat(url, model, prompt, images, schema=None, num_predict=700):
+    """Raw text of the model's answer.  Capped in length: a model that starts to loop is cut off."""
+    body = {"model": model, "stream": False, "keep_alive": "30m",
+            "options": {"temperature": 0, "num_ctx": 8192, "num_predict": num_predict},
+            "messages": [{"role": "user", "content": prompt,
+                          "images": [base64.b64encode(i).decode() for i in images]}]}
+    if schema:
+        body["format"] = schema
+    return ollama(url, "/api/chat", body)["message"]["content"]
+
+
+NUM = r"(-?\d+(?:\.\d+)?)"
+BOX_RE = re.compile(r"\[\s*" + NUM + r"\s*,\s*" + NUM + r"\s*,\s*" + NUM + r"\s*,\s*" + NUM + r"\s*\]")
+
+
+def iou(a, b):
+    ix = max(0, min(a[2], b[2]) - max(a[0], b[0]))
+    iy = max(0, min(a[3], b[3]) - max(a[1], b[1]))
+    inter = ix * iy
+    union = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter
+    return inter / union if union > 0 else 0
 
 
 def find_faces(url, model, im):
@@ -115,20 +126,19 @@ def find_faces(url, model, im):
     s = min(1.0, SEND_LONG / max(w, h))
     sw, sh = max(28, round(w * s / 28) * 28), max(28, round(h * s / 28) * 28)
     sent = im.resize((sw, sh), Image.LANCZOS)
-    d = chat(url, model, FIND_PROMPT, [jpeg_bytes(sent)], FIND_SCHEMA)
+    text = chat(url, model, FIND_PROMPT, [jpeg_bytes(sent)], None, num_predict=600)
     norm = "qwen3" in model.lower()                      # Qwen3-VL answers on a 0-1000 grid, Qwen2.5-VL in pixels
     boxes = []
-    for f in d.get("faces", []):
-        try:
-            x1, y1, x2, y2 = (float(v) for v in f["bbox_2d"])
-        except (KeyError, TypeError, ValueError):
-            continue
+    for m in BOX_RE.finditer(text):                      # works on complete or cut-off answers
+        x1, y1, x2, y2 = (float(v) for v in m.groups())
         fx = (lambda v: v / 1000) if norm else (lambda v: v / sw)
         fy = (lambda v: v / 1000) if norm else (lambda v: v / sh)
         b = [min(max(fx(min(x1, x2)), 0), 1), min(max(fy(min(y1, y2)), 0), 1),
              min(max(fx(max(x1, x2)), 0), 1), min(max(fy(max(y1, y2)), 0), 1)]
         if b[2] - b[0] < 0.005 or b[3] - b[1] < 0.005 or (b[2] - b[0]) * (b[3] - b[1]) > 0.5:
             continue                                      # nothing, or implausibly huge
+        if any(iou(b, o) > 0.5 for o in boxes):
+            continue                                      # the same face again
         boxes.append(b)
     boxes.sort(key=lambda b: -(b[2] - b[0]) * (b[3] - b[1]))
     return boxes
@@ -149,7 +159,10 @@ def judge_faces(url, model, im, boxes):
         crops.append(jpeg_bytes(c))
         idx.append(i)
     if crops:
-        d = chat(url, model, EYES_PROMPT, crops, EYES_SCHEMA).get("people", [])
+        try:
+            d = json.loads(chat(url, model, EYES_PROMPT, crops, EYES_SCHEMA, num_predict=60 * len(crops) + 60)).get("people", [])
+        except ValueError:
+            d = []                                        # unreadable answer: leave these as unclear
         if len(d) == len(crops):
             for i, p in zip(idx, d):
                 out[i] = (p.get("eyes", "unclear"), p.get("looking", "camera"))
@@ -241,7 +254,8 @@ def main():
         if not jpg:
             return row, None, "could not make a preview"
         try:
-            return row, ask(url, model, jpg), None
+            t = time.time()
+            return row, ask(url, model, jpg) + (time.time() - t,), None
         except (urllib.error.URLError, OSError, ValueError, KeyError) as e:
             return row, None, f"{type(e).__name__}: {e}"
 
@@ -254,10 +268,10 @@ def main():
                 if res:
                     con.execute("INSERT OR REPLACE INTO vision(path,size,mtime_ns,model,status,faces,eyes_closed,"
                                 "looking_away,note,detail,seen_at) VALUES (?,?,?,?,'ok',?,?,?,?,?,?)",
-                                (path, size, mtime, tag, *res, now))
+                                (path, size, mtime, tag, *res[:5], now))
                     if a.limit:
                         print(f"  {path} (/annotated/{fid}): faces {res[0]}, eyes closed {res[1]}, "
-                              f"looking away {res[2]}{' - ' + res[3] if res[3] else ''}")
+                              f"looking away {res[2]}{' - ' + res[3] if res[3] else ''}  [{res[5]:.1f}s]")
                 else:
                     bad += 1
                     con.execute("INSERT OR REPLACE INTO vision(path,size,mtime_ns,model,status,note,seen_at) "
