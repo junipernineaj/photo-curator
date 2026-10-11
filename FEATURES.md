@@ -60,7 +60,7 @@ Dropbox is four features bundled together; they have different costs here:
 - Retire old source folders only on Tony's say-so (Pictures and AGGREGATED-Photos verified safe for photos and videos; keep library packages).
 - Purge of quarantine only after 30 days and with Tony's explicit go-ahead.
 - Birmingham ~11k cluster on the Map: question still open.
-- Weekly iCloud pull script; iCloud clearing (gated plan); Google clear-out separately.
+- Weekly iCloud pull script; iCloud clearing (gated plan; `scripts/cloud_clear_check.py` is the gate, written 11 Oct); Google photos deleted by Tony 11 Oct (in Google's bin for 60 days: run the check on Google too while that net exists).
 
 ## Presenting and tagging
 

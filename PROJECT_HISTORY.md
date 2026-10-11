@@ -389,3 +389,9 @@ the Review page: a link per group builds the composite and shows before | after;
 `scripts/best_take.py --apply` adds the picture to `originals/best-take/` with provenance and EXIF, and can mark the
 other frames discard (new picture as keeper) for the normal quarantine run.  Design rule kept: the web page only
 records, scripts change the archive.  The composite logic lives in `app/besttake.py`.
+
+18:10, 11 Oct: Tony cleared Google Photos (after finding a device still backing up and re-uploading as he deleted) and
+asked how to do Apple. Wrote `scripts/cloud_clear_check.py`: a read-only readiness check (Google zips vs archive, optional CRC32
+deep check; Apple via an `osxphotos query --json` list from the Mac, which also preserves albums/favourites/people) that must
+say READY before anything is deleted from iCloud. Apple deletion method agreed: Photos on the Mac, staged by date, Hidden album
+too, Recently Deleted left for a while before emptying. Not run on the real data yet.

@@ -607,3 +607,20 @@ The scan now records `lat`, `lon` and `geo_source` (`exif` = the picture's own G
 
 Sample (3,000 JPEG/HEIC): 43% had GPS in the file: Google 74%, iCloud 91-98%, old library folders about 0%. Library masters
 may keep places in the Aperture/iPhoto/Photos databases instead (not read yet).
+
+### Before clearing iCloud or Google (scripts/cloud_clear_check.py)
+
+Read-only. It checks that everything in the cloud is accounted for in the archive: indexed, or in quarantine as an exact
+duplicate (the kept copy is still there), or in quarantine because you discarded it on the Review page. Anything else is
+listed as UNACCOUNTED and the verdict is NOT READY.
+
+1. Run `scripts/scan_archive.py` first so the index is current.
+2. **Google:** `scripts/cloud_clear_check.py google` compares every photo/video in the Takeout zips (`takeout-zips/`) with the
+   archive. Add `--deep` for a slow second check that re-reads each archive file and compares its CRC32 with the zip's.
+3. **Apple:** on the Mac, `osxphotos query --json > ~/photos.json` (add `--library "..."` to name the system library), copy the file
+   to the server, then `scripts/cloud_clear_check.py apple --photos-json ~/photos.json`. It matches each item by size and name
+   (or size and day), warns about Live Photos with no video half, items not downloaded to the Mac, and saves a copy of the list in
+   `cloud-metadata/` (albums, favourites, keywords, captions and named people exist only in iCloud/Photos).
+4. The report is written to `cloud-clear-check-<time>.txt` beside the archive. Exit status 0 = ready, 1 = not ready, 2 = could not run.
+5. It cannot see the offsite drive, anything added to the cloud since the Takeout / the Mac's download, or devices that could
+   re-upload: tick those yourself before deleting. Google's bin keeps deleted items 60 days; Apple's Recently Deleted about 30.
