@@ -3,7 +3,8 @@
 
 Hashes (SHA-1) every file under SOURCE and looks each one up in the scan index
 (curator.sqlite). A file counts as safe if its hash is in the index, or in a parked folder
-(originals/_*, such as _thumbnails-... and _previews-apple, which are not indexed but are kept).
+(originals/_*, such as _thumbnails-... and _previews-apple, which are not indexed but are kept;
+_staging-* folders are never counted, so a staging copy is judged only against the real archive).
 Anything else is listed as MISSING in a report file. This script never changes or deletes anything.
 
 Usage:
@@ -128,7 +129,7 @@ def main():
             parked = set()
             orig = os.path.join(a.archive, "originals")
             for d in sorted(os.listdir(orig)):
-                if d.startswith("_"):
+                if d.startswith("_") and not d.startswith("_staging"):   # staging folders are the thing being checked
                     for root, _dirs, files in os.walk(os.path.join(orig, d)):
                         for fn in files:
                             try:
