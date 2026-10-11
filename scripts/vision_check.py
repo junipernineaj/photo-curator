@@ -51,7 +51,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from PIL import Image  # noqa: E402
 from app import similar, thumbs  # noqa: E402
 
-MODEL_TAG = "/faces-v2"        # stored with the model name; bump to redo everything after a method change
+MODEL_TAG = "/faces-v3"        # stored with the model name; bump to redo everything after a method change
 FIND_PROMPT = ("Locate every human face in the image, including small faces in the background. "
                "Output the bounding box of each face in JSON, like "
                "[{\"bbox_2d\": [x1, y1, x2, y2], \"label\": \"face\"}]. Output [] if there are no people.")
