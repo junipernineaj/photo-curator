@@ -523,3 +523,23 @@ Add `--verify` for a full checksum comparison (about an hour); it must say VERIF
 `rsync -avhc --partial <excludes> SRC/ DST/`. Because nothing is ever deleted on the backup, files moved to
 `_quarantine` or parked appear there twice (old and new path) until you prune the backup after a purge.
 Run it after each batch of quarantine moves and before any retirement of an old source folder.
+
+### Map (where the pictures were taken)
+
+The scan now records `lat`, `lon` and `geo_source` (`exif` = the picture's own GPS, `google` = the Takeout `.json` next to it).
+(0, 0) is treated as "no location". For an index built before this existed:
+
+1. `scripts/scan_archive.py --regeo` adds the columns and reads GPS for every file not yet checked (index only, photos
+   untouched; exiftool reads just the two GPS tags, so it is much quicker than a full re-scan). New files get their location
+   during the normal scan. The summary ends with a `Locations:` line.
+2. Open **Map**. Circles are grouped photos (the number is how many); click to zoom in; at street level it opens the photo grid
+   for that spot. **Show the photos in this view** opens the Photos page for the visible area; the Year and Type selectors apply.
+   The Photos page accepts `?bbox=south,west,north,east`.
+3. Background tiles are OpenStreetMap by default: your browser fetches the tiles (photos and locations never leave the server,
+   but the tile requests show roughly where you are looking). `TILE_URL=none` gives a plain map with no outside requests;
+   `TILE_URL=` can point at your own tile server. Leaflet 1.9.4 is vendored in `app/static/vendor/leaflet`.
+4. The map reads `main.files` directly, and the page says what to run if the columns are not there yet, so pulling the code before
+   `--regeo` does not break the other pages.
+
+Sample (3,000 JPEG/HEIC): 43% had GPS in the file: Google 74%, iCloud 91-98%, old library folders about 0%. Library masters
+may keep places in the Aperture/iPhoto/Photos databases instead (not read yet).

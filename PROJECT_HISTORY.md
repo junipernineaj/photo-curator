@@ -352,3 +352,13 @@ quarantine the identical copy in B", one-shot, capped), and `scripts/quarantine.
 refuses before 30 days. Keeper order: Takeout, iCloud, exports, library folders, aggregated copies. Reason for the split:
 the browse app will later sit behind Cloudflare and should hold no power to move files. Tested on a small fake archive
 (move, sidecar, hand-set date copied, second run does nothing, restore, early purge refused); not yet run on real data.
+
+## 11 Oct: backup script, quarantine batches, map
+
+Quarantined every exact duplicate in batches (20, then 4,299 files, then the rest; index 124k to 82.8k photos). The first 20
+were checked against the log. `scripts/backup.sh` (database snapshots, no-delete rsync, optional checksum verify) ran clean
+(166 GB added). ExtremeSSD `Photos-catchall` and `Ray's Pictures` copied to `_staging-ExtremeSSD`, checked by
+`verify_source.py` (which now ignores staging folders and sorts junk, metadata and real files): 646 new files imported,
+including April 2011. 61 GoPro `.LRV`/`.THM` previews kept in `_gopro-proxies` (the full videos no longer exist).
+`Pictures` and `AGGREGATED-Photos` verified safe for photos and videos. Location sample: 43% of pictures carry GPS.
+Built the Map (scan `--regeo`, Takeout location files, Leaflet map with server-side grouping, bbox filter on Photos).

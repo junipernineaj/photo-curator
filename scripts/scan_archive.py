@@ -15,6 +15,7 @@ Usage:
   scripts/scan_archive.py --limit 200          # try a small batch first
   scripts/scan_archive.py --report             # print the summary only
   scripts/scan_archive.py --redate             # re-read dates from file names (quick, index only)
+  scripts/scan_archive.py --regeo              # read GPS locations for files not yet checked (for the Map)
   ARCHIVE=/some/path DB=/some/index.sqlite scripts/scan_archive.py
 
 Re-running is cheap: files whose path, size and mtime are unchanged are skipped.
@@ -64,6 +65,19 @@ CREATE INDEX IF NOT EXISTS idx_files_sha1 ON files(sha1);
 CREATE INDEX IF NOT EXISTS idx_files_taken ON files(taken_at);
 CREATE INDEX IF NOT EXISTS idx_files_pair ON files(pair_key);
 """
+
+# Added later (the Map): where the picture was taken. Older indexes get these columns on the next run.
+GEO_COLUMNS = (("lat", "REAL"), ("lon", "REAL"), ("geo_source", "TEXT"),   # geo_source: exif | google
+               ("geo_done", "INTEGER NOT NULL DEFAULT 0"))                  # 1 once GPS has been looked for
+
+
+def migrate(db):
+    have = {r[1] for r in db.execute("PRAGMA table_info(files)")}
+    for name, decl in GEO_COLUMNS:
+        if name not in have:
+            db.execute(f"ALTER TABLE files ADD COLUMN {name} {decl}")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_files_geo ON files(lat, lon) WHERE lat IS NOT NULL")
+    db.commit()
 
 FOLDER_DATE = re.compile(r"(?<!\d)((?:19|20)\d{2})[_\-.]?(0[1-9]|1[0-2])[_\-.]?(0[1-9]|[12]\d|3[01])(?!\d)")
 FOLDER_YEAR_MONTH = re.compile(r"(?<!\d)((?:19|20)\d{2})[_\-.](0[1-9]|1[0-2])(?!\d)")
@@ -193,7 +207,67 @@ def sha1_of(path):
     return h.hexdigest()
 
 
-def run_exiftool(abs_paths):
+def valid_geo(lat, lon):
+    """A usable (lat, lon) pair, or None. (0, 0) is how cameras and Google say 'no location'."""
+    try:
+        lat, lon = float(lat), float(lon)
+    except (TypeError, ValueError):
+        return None
+    if abs(lat) > 90 or abs(lon) > 180 or (abs(lat) < 1e-6 and abs(lon) < 1e-6):
+        return None
+    return lat, lon
+
+
+def google_sidecar_geo(abs_path):
+    """Location from the Google Takeout sidecar next to the file (geoData, else geoDataExif), or None."""
+    for suffix in (".supplemental-metadata.json", ".json"):
+        try:
+            with open(abs_path + suffix, encoding="utf-8") as f:
+                meta = json.load(f)
+        except (OSError, ValueError):
+            continue
+        for key in ("geoData", "geoDataExif"):
+            g = meta.get(key) if isinstance(meta, dict) else None
+            if isinstance(g, dict):
+                pos = valid_geo(g.get("latitude"), g.get("longitude"))
+                if pos:
+                    return pos
+        return None
+    return None
+
+
+def geo_for(tags, abs_path):
+    """(lat, lon, source) from the picture's own GPS tags, else the Takeout sidecar; else all None."""
+    pos = valid_geo(tags.get("GPSLatitude"), tags.get("GPSLongitude"))
+    if pos:
+        return pos[0], pos[1], "exif"
+    pos = google_sidecar_geo(abs_path)
+    if pos:
+        return pos[0], pos[1], "google"
+    return None, None, None
+
+
+def regeo(db, archive, batch_size=500):
+    """Fill in lat/lon for files that have not been checked yet (index only; photos untouched)."""
+    todo = [r[0] for r in db.execute("SELECT path FROM files WHERE geo_done = 0 ORDER BY id")]
+    print(f"{len(todo)} files to check for a location")
+    found, t0 = 0, time.time()
+    for i in range(0, len(todo), batch_size):
+        chunk = todo[i:i + batch_size]
+        paths = [os.path.join(archive, p) for p in chunk]
+        tags = run_exiftool(paths, gps_only=True)
+        for rel, ap in zip(chunk, paths):
+            lat, lon, src = geo_for(tags.get(ap, {}), ap)
+            db.execute("UPDATE files SET lat=?, lon=?, geo_source=?, geo_done=1 WHERE path=?",
+                       (lat, lon, src, rel))
+            found += lat is not None
+        db.commit()
+        print(f"  checked {min(i + batch_size, len(todo))}/{len(todo)}, {found} with a location "
+              f"({time.time() - t0:.0f}s)", flush=True)
+    print(f"Done. {found} of {len(todo)} have a location.")
+
+
+def run_exiftool(abs_paths, gps_only=False):
     """Return {abs_path: tags} for a batch of files. Never raises on bad files."""
     if not abs_paths:
         return {}
@@ -202,10 +276,11 @@ def run_exiftool(abs_paths):
         arg.write("\n".join(abs_paths) + "\n")
         argfile = arg.name
     try:
-        cmd = ["exiftool", "-json", "-n", "-q", "-m", "-charset", "filename=utf8",
-               "-DateTimeOriginal", "-CreateDate", "-MediaCreateDate",
-               "-ImageWidth", "-ImageHeight", "-Make", "-Model",
-               "-ContentIdentifier", "-@", argfile]
+        wanted = (["-GPSLatitude", "-GPSLongitude"] if gps_only else
+                  ["-DateTimeOriginal", "-CreateDate", "-MediaCreateDate",
+                   "-ImageWidth", "-ImageHeight", "-Make", "-Model",
+                   "-ContentIdentifier", "-GPSLatitude", "-GPSLongitude"])
+        cmd = ["exiftool", "-json", "-n", "-q", "-m", "-charset", "filename=utf8"] + wanted + ["-@", argfile]
         res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
                              errors="replace")
         try:
@@ -291,6 +366,10 @@ def report(db):
     print(f"Live Photo pairs found: {live}")
     side = q("SELECT COUNT(*) FROM files WHERE has_sidecar = 1")[0][0]
     print(f"Files with an XMP/AAE sidecar: {side}")
+    geo = q("SELECT COALESCE(geo_source,'none'), COUNT(*) FROM files WHERE geo_done = 1 GROUP BY 1")
+    unchecked = q("SELECT COUNT(*) FROM files WHERE geo_done = 0")[0][0]
+    print("Locations: " + ", ".join(f"{n} {s}" for s, n in geo)
+          + (f"   ({unchecked} not checked yet: run --regeo)" if unchecked else ""))
 
 
 def main():
@@ -305,6 +384,9 @@ def main():
     ap.add_argument("--redate", action="store_true",
                     help="re-read dates from file names for files dated only by folder or file "
                          "date (index only, quick), then print the summary")
+    ap.add_argument("--regeo", action="store_true",
+                    help="read GPS locations (photo tags, then Google sidecars) for files not yet "
+                         "checked, then print the summary; index only, photos untouched")
     args = ap.parse_args()
 
     archive = os.path.abspath(args.archive)
@@ -317,12 +399,16 @@ def main():
 
     db = sqlite3.connect(dbpath)
     db.executescript(SCHEMA)
+    migrate(db)
     print(f"Archive: {archive}\nIndex:   {dbpath}")
+
+    if args.regeo:
+        regeo(db, archive)
 
     if args.redate:
         print(f"Dates re-read from file names: {redate_from_filenames(db)} files changed")
 
-    if not args.report and not args.redate:
+    if not args.report and not args.redate and not args.regeo:
         known = {p: (s, m) for p, s, m in
                  db.execute("SELECT path, size, mtime_ns FROM files")}
         seen = set()
@@ -359,22 +445,26 @@ def main():
                     print(f"  could not read {rel}: {e}")
                     continue
                 w, h = t.get("ImageWidth"), t.get("ImageHeight")
+                lat, lon, gsrc = geo_for(t, abs_path)
                 db.execute(
                     "INSERT INTO files (path,kind,ext,size,mtime_ns,sha1,taken_at,"
-                    "date_source,width,height,make,model,content_id,has_sidecar,scanned_at)"
-                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+                    "date_source,width,height,make,model,content_id,has_sidecar,scanned_at,"
+                    "lat,lon,geo_source,geo_done)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)"
                     " ON CONFLICT(path) DO UPDATE SET kind=excluded.kind,ext=excluded.ext,"
                     "size=excluded.size,mtime_ns=excluded.mtime_ns,sha1=excluded.sha1,"
                     "taken_at=excluded.taken_at,date_source=excluded.date_source,"
                     "width=excluded.width,height=excluded.height,make=excluded.make,"
                     "model=excluded.model,content_id=excluded.content_id,"
-                    "has_sidecar=excluded.has_sidecar,scanned_at=excluded.scanned_at",
+                    "has_sidecar=excluded.has_sidecar,scanned_at=excluded.scanned_at,"
+                    "lat=excluded.lat,lon=excluded.lon,geo_source=excluded.geo_source,geo_done=1",
                     (rel, kind, ext, st.st_size, st.st_mtime_ns, digest, taken, source,
                      int(w) if isinstance(w, (int, float)) else None,
                      int(h) if isinstance(h, (int, float)) else None,
                      t.get("Make"), t.get("Model"),
                      str(t["ContentIdentifier"]) if t.get("ContentIdentifier") else None,
-                     int(has_side), datetime.now().isoformat(timespec="seconds")))
+                     int(has_side), datetime.now().isoformat(timespec="seconds"),
+                     lat, lon, gsrc))
                 done += 1
             db.commit()
             batch.clear()

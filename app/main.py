@@ -144,7 +144,7 @@ SOURCE_EXPR = ("CASE WHEN instr(path, '/') > 0 THEN substr(path, 1, instr(path, 
                "ELSE '' END")
 
 
-def grid(request, db, source, year, kind, live, q, src, sort, page, month=""):
+def grid(request, db, source, year, kind, live, q, src, sort, page, month="", bbox=""):
     sources = [{"key": r["s"], "label": SOURCE_LABELS.get(r["s"], r["s"] or "(top level)"), "n": r["n"]}
                for r in db.execute(
                    f"SELECT {SOURCE_EXPR} AS s, COUNT(*) n FROM {FILES} files WHERE {VISIBLE} "
@@ -164,6 +164,12 @@ def grid(request, db, source, year, kind, live, q, src, sort, page, month=""):
         args.append(f"{int(month):02d}")
     else:
         month = ""
+    box = parse_bbox(bbox)
+    if box:
+        where.append("id IN (SELECT id FROM main.files WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?)")
+        args += [box[0], box[2], box[1], box[3]]
+    else:
+        bbox = ""
     if kind in ("photo", "video"):
         where.append("kind = ?")
         args.append(kind)
@@ -190,7 +196,8 @@ def grid(request, db, source, year, kind, live, q, src, sort, page, month=""):
         f"GROUP BY y ORDER BY y DESC").fetchall()
     grand = db.execute(f"SELECT COUNT(*), COALESCE(SUM(size),0) FROM {FILES} files WHERE {VISIBLE}").fetchone()
 
-    base = {"source": source, "year": year, "month": month, "kind": kind, "live": live, "q": q, "src": src, "sort": sort}
+    base = {"source": source, "year": year, "month": month, "kind": kind, "live": live, "q": q, "src": src, "sort": sort,
+            "bbox": bbox}
     more_url = None
     if page * PAGE_SIZE < total:
         more_url = "/?" + urlencode({**{k: v for k, v in base.items() if v}, "page": page + 1})
@@ -202,8 +209,87 @@ def grid(request, db, source, year, kind, live, q, src, sort, page, month=""):
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request, db=Depends(get_db), source: str = "", year: str = "", kind: str = "",
           live: str = "", q: str = "", src: str = "", sort: str = "new", page: int = 1,
-          month: str = ""):
-    return grid(request, db, source, year, kind, live, q, src, sort, page, month)
+          month: str = "", bbox: str = ""):
+    return grid(request, db, source, year, kind, live, q, src, sort, page, month, bbox)
+
+
+def parse_bbox(text):
+    """'south,west,north,east' -> (s, w, n, e) floats, or None."""
+    try:
+        s_, w, n, e = (float(x) for x in (text or "").split(","))
+    except ValueError:
+        return None
+    if not (-90 <= s_ <= n <= 90 and -180 <= w <= e <= 180):
+        return None
+    return s_, w, n, e
+
+
+# Background map. Leave as is for OpenStreetMap tiles (your browser fetches them from the internet; photos
+# and their locations never leave the server). Set TILE_URL=none for a plain map with no outside requests,
+# or point it at your own tile server.
+TILE_URL = os.environ.get("TILE_URL", "https://tile.openstreetmap.org/{z}/{x}/{y}.png")
+TILE_ATTRIBUTION = os.environ.get("TILE_ATTRIBUTION", "&copy; OpenStreetMap contributors")
+
+GEO = ("(SELECT f.id, f.kind, f.pair_key, f.lat, f.lon, COALESCE(o.taken_at, f.taken_at) AS taken_at "
+       "FROM main.files f LEFT JOIN ed.date_override o ON o.path = f.path WHERE f.lat IS NOT NULL)")
+
+
+def geo_ready(db):
+    return "lat" in {r[1] for r in db.execute("PRAGMA table_info(files)")}
+
+
+def geo_filters(year, kind):
+    where, args = ["NOT (kind = 'video' AND pair_key IS NOT NULL)"], []
+    if year.isdigit():
+        where.append("substr(taken_at,1,4) = ?")
+        args.append(year)
+    if kind in ("photo", "video"):
+        where.append("kind = ?")
+        args.append(kind)
+    return " AND ".join(where), args
+
+
+@app.get("/map", response_class=HTMLResponse)
+def map_page(request: Request, db=Depends(get_db), year: str = "", kind: str = ""):
+    ready = geo_ready(db)
+    located = total = 0
+    years = []
+    if ready:
+        located = db.execute(f"SELECT COUNT(*) FROM {GEO} g WHERE NOT (kind='video' AND pair_key IS NOT NULL)").fetchone()[0]
+        years = db.execute(f"SELECT substr(taken_at,1,4) y, COUNT(*) n FROM {GEO} g "
+                           "WHERE NOT (kind='video' AND pair_key IS NOT NULL) GROUP BY y ORDER BY y DESC").fetchall()
+        total = db.execute(f"SELECT COUNT(*) FROM {FILES} files WHERE {VISIBLE}").fetchone()[0]
+    return templates.TemplateResponse(request, "map.html", {
+        "ready": ready, "located": located, "total": total, "years": years,
+        "f": {"year": year, "kind": kind}, "tile_url": "" if TILE_URL.lower() == "none" else TILE_URL,
+        "tile_attr": TILE_ATTRIBUTION})
+
+
+@app.get("/api/geo/summary")
+def geo_summary(db=Depends(get_db), year: str = "", kind: str = ""):
+    if not geo_ready(db):
+        return {"n": 0}
+    where, args = geo_filters(year, kind)
+    r = db.execute(f"SELECT COUNT(*), MIN(lat), MIN(lon), MAX(lat), MAX(lon) FROM {GEO} g WHERE {where}", args).fetchone()
+    return {"n": r[0], "bounds": [r[1], r[2], r[3], r[4]] if r[0] else None}
+
+
+@app.get("/api/geo")
+def geo_clusters(db=Depends(get_db), s: float = -90, w: float = -180, n: float = 90, e: float = 180,
+                 zoom: int = 2, year: str = "", kind: str = ""):
+    """Photos in view, grouped into grid cells that get finer as you zoom in."""
+    if not geo_ready(db):
+        return []
+    s, n = max(-90.0, min(s, n)), min(90.0, max(s, n))
+    w, e = max(-180.0, min(w, e)), min(180.0, max(w, e))
+    cell = 84.375 / (2 ** max(0, min(zoom, 20)))
+    where, args = geo_filters(year, kind)
+    rows = db.execute(
+        f"SELECT COUNT(*), AVG(lat), AVG(lon), MIN(lat), MIN(lon), MAX(lat), MAX(lon), MIN(id) FROM {GEO} g "
+        f"WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? AND {where} "
+        "GROUP BY CAST((lat + 90) / ? AS INTEGER), CAST((lon + 180) / ? AS INTEGER) LIMIT 2500",
+        [s, n, w, e] + args + [cell, cell]).fetchall()
+    return [{"n": r[0], "lat": r[1], "lon": r[2], "box": [r[3], r[4], r[5], r[6]], "id": r[7]} for r in rows]
 
 
 MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]

@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Map · Photo Curator{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
+<h1>Map</h1>
+{% if not ready %}
+<p class="notice">The index has no locations yet. On the server run <code>scripts/scan_archive.py --regeo</code>, then reload.</p>
+{% elif located == 0 %}
+<p class="notice">No photo has a location yet. Run <code>scripts/scan_archive.py --regeo</code> if you have not already.</p>
+{% else %}
+<form class="filters" id="mapfilters" onsubmit="return false">
+  <select name="year" aria-label="Year">
+    <option value="">All years</option>
+    {% for y in years %}{% if y.y %}<option value="{{ y.y }}" {% if f.year == y.y %}selected{% endif %}>{{ y.y }} ({{ "{:,}".format(y.n) }})</option>{% endif %}{% endfor %}
+  </select>
+  <select name="kind" aria-label="Type">
+    <option value="">Photos and videos</option>
+    <option value="photo" {% if f.kind == 'photo' %}selected{% endif %}>Photos</option>
+    <option value="video" {% if f.kind == 'video' %}selected{% endif %}>Videos</option>
+  </select>
+  <button type="button" id="showview">Show the photos in this view</button>
+</form>
+<p class="muted small">{{ "{:,}".format(located) }} of {{ "{:,}".format(total) }} items have a location
+  ({{ (100 * located / total) | round(0) | int if total else 0 }}%). Click a circle to zoom into it; the number is how many photos it holds.
+  {% if not tile_url %}Background map is switched off (no outside requests).{% endif %}</p>
+<div id="map" class="mapbox" role="application" aria-label="Map of where photos were taken"></div>
+<script src="/static/vendor/leaflet/leaflet.js"></script>
+<script>
+(function () {
+  var map = L.map('map', {minZoom: 2, worldCopyJump: false}).setView([30, 10], 2);
+  var tileUrl = {{ tile_url | tojson }};
+  if (tileUrl) L.tileLayer(tileUrl, {maxZoom: 19, attribution: {{ tile_attr | tojson }}}).addTo(map);
+  var layer = L.layerGroup().addTo(map), ticket = 0, form = document.getElementById('mapfilters');
+
+  function filt() { return {year: form.year.value, kind: form.kind.value}; }
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+  function icon(n) {
+    var size = n === 1 ? 14 : Math.round(26 + 9 * Math.log10(n));
+    var label = n === 1 ? '' : (n >= 10000 ? Math.round(n / 1000) + 'k' : n);
+    return L.divIcon({className: '', iconSize: [size, size],
+      html: '<div class="mk' + (n === 1 ? ' one' : '') + '" style="width:' + size + 'px;height:' + size +
+            'px;line-height:' + size + 'px">' + label + '</div>'});
+  }
+
+  function listUrl(b) {
+    var q = new URLSearchParams({bbox: [b[0], b[1], b[2], b[3]].map(function (x) { return x.toFixed(5); }).join(',')});
+    var f = filt(); if (f.year) q.set('year', f.year); if (f.kind) q.set('kind', f.kind);
+    return '/?' + q.toString();
+  }
+
+  function refresh() {
+    var my = ++ticket, b = map.getBounds(), f = filt();
+    var q = new URLSearchParams({s: clamp(b.getSouth(), -90, 90), w: clamp(b.getWest(), -180, 180),
+      n: clamp(b.getNorth(), -90, 90), e: clamp(b.getEast(), -180, 180), zoom: map.getZoom(), year: f.year, kind: f.kind});
+    fetch('/api/geo?' + q).then(function (r) { return r.json(); }).then(function (items) {
+      if (my !== ticket) return;
+      layer.clearLayers();
+      items.forEach(function (c) {
+        var m = L.marker([c.lat, c.lon], {icon: icon(c.n)}).addTo(layer);
+        if (c.n === 1) {
+          m.bindPopup('<a href="/photo/' + c.id + '"><img class="pop" src="/thumb/' + c.id + '" alt=""></a>');
+        } else {
+          m.on('click', function () {
+            var bx = c.box, flat = (bx[2] - bx[0]) < 0.0004 && (bx[3] - bx[1]) < 0.0004;
+            if (flat || map.getZoom() >= 17) {
+              location.href = listUrl([bx[0] - 0.0005, bx[1] - 0.0005, bx[2] + 0.0005, bx[3] + 0.0005]);
+            } else {
+              map.fitBounds([[bx[0], bx[1]], [bx[2], bx[3]]], {maxZoom: 18, padding: [50, 50]});
+            }
+          });
+        }
+      });
+    });
+  }
+
+  function fitAll() {
+    var f = filt(), q = new URLSearchParams({year: f.year, kind: f.kind});
+    fetch('/api/geo/summary?' + q).then(function (r) { return r.json(); }).then(function (s) {
+      if (s.bounds) map.fitBounds([[s.bounds[0], s.bounds[1]], [s.bounds[2], s.bounds[3]]], {padding: [40, 40], maxZoom: 12});
+      else refresh();
+    });
+  }
+
+  map.on('moveend', refresh);
+  form.year.addEventListener('change', fitAll);
+  form.kind.addEventListener('change', fitAll);
+  document.getElementById('showview').addEventListener('click', function () {
+    var b = map.getBounds();
+    location.href = listUrl([clamp(b.getSouth(), -90, 90), clamp(b.getWest(), -180, 180),
+                             clamp(b.getNorth(), -90, 90), clamp(b.getEast(), -180, 180)]);
+  });
+  fitAll();
+})();
+</script>
+{% endif %}
+{% endblock %}

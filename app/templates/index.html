@@ -39,9 +39,12 @@
     <option value="old" {% if f.sort == 'old' %}selected{% endif %}>Oldest first</option>
   </select>
   <label class="check"><input type="checkbox" name="live" value="1" {% if f.live == '1' %}checked{% endif %}> Live Photos only</label>
+  {% if f.bbox %}<input type="hidden" name="bbox" value="{{ f.bbox }}">{% endif %}
   <input id="q" type="search" name="q" value="{{ f.q }}" placeholder="Search folder or file name">
 </form>
 
+{% if f.bbox %}<p class="notice small">Showing photos from an area of the <a href="/map">map</a>.
+  <a href="/?{% for k in ['source','year','month','kind','live','q','src','sort'] %}{% if f[k] %}{{ k }}={{ f[k] | urlencode }}&{% endif %}{% endfor %}">Show everywhere</a></p>{% endif %}
 <section id="results">
   <p class="count">{{ "{:,}".format(total) }} shown
     <span class="muted">of {{ "{:,}".format(grand[0]) }} items, {{ grand[1] | human }}</span></p>
