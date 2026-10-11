@@ -16,6 +16,7 @@ to it, on localhost.  Results go in curator_similar.sqlite (derived data; safe t
   scripts/vision_check.py --limit 20             # try 20 photos first and print what it says
   scripts/vision_check.py                        # all photos in groups you have not decided yet
   scripts/vision_check.py --match 2017_07_29     # only photos with this text in their path
+  scripts/vision_check.py --only all             # also groups that are copies of one shot (adds little)
   scripts/vision_check.py --all                  # include groups already decided
   scripts/vision_check.py --model qwen2.5vl:7b   # choose the model (default: first vision model found)
 
@@ -192,6 +193,9 @@ def main():
     ap.add_argument("--list-models", action="store_true")
     ap.add_argument("--all", action="store_true", help="include groups you have already decided")
     ap.add_argument("--limit", type=int, default=0, help="look at at most N photos, and print each answer")
+    ap.add_argument("--only", choices=("bursts", "all"), default="bursts",
+                    help="bursts (default): groups shot within 10 s in one source, where picking a frame matters; "
+                         "all: every group (copies of the same shot have the same eyes, so it adds little)")
     ap.add_argument("--match", help="only photos whose path contains this text (e.g. 2017_07_29)")
     ap.add_argument("--workers", type=int, default=1, help="requests at once (1 is fine; try 2 on a big GPU)")
     ap.add_argument("--retry", action="store_true", help="try earlier failures again")
@@ -228,10 +232,14 @@ def main():
     groups = {}
     for gid, path, best in con.execute("SELECT group_id, path, is_best FROM sim_group"):
         groups.setdefault(gid, []).append((path, best))
+    span = {r[0]: r[1] for r in con.execute("SELECT group_id, span_s FROM sim_info")}
     order = []
     for gid, members in groups.items():
         paths = [p for p, _ in members if p in info]
         if len(paths) < 2 or (not a.all and all(p in marked for p in paths)):
+            continue
+        if a.only == "bursts" and not (span.get(gid) is not None and span[gid] <= 10
+                                       and len({p.split("/")[0] for p in paths}) == 1):
             continue
         spare = sum(info[p][3] for p in paths) - max(info[p][3] for p in paths)
         order.append((-spare, gid, paths))

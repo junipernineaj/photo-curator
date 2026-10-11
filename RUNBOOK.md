@@ -413,7 +413,8 @@ It is advice: the model can miscount small faces, so look before you keep.
     scripts/vision_check.py                    # everything in groups you have not decided (resumable)
     scripts/vision_check.py --model NAME       # choose the model (default: first vision model found)
 
-Photos are done in the order the Review page shows them.  Results are in `curator_similar.sqlite`
+By default only burst groups are checked (one source, shot within 10 seconds), because copies of the same shot
+have the same eyes; `--only all` does every group.  Photos are done in the order the Review page shows them.  Results are in `curator_similar.sqlite`
 (table `vision`), so they survive a re-run of find_similar.py.
 
 ## Bringing in an old photo folder, and retiring it
