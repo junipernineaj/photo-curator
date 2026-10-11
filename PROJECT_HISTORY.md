@@ -383,3 +383,9 @@ Added the in-page viewer and `scripts/vision_check.py` (Ollama, structured JSON:
 looking away, note), shown on the Review cards and used first in the suggested keeper.  Same morning: the
 photo page Back button now works when opened in a new tab.  Open: how reliable the model is on small faces
 (to be judged on a trial of 20); later reuse of the same model for tagging.
+
+12:50, 11 Oct: Tony called the first Best Take result (garden party, one blinking boy) "impeccable".  Wired it into
+the Review page: a link per group builds the composite and shows before | after; approving records the choice;
+`scripts/best_take.py --apply` adds the picture to `originals/best-take/` with provenance and EXIF, and can mark the
+other frames discard (new picture as keeper) for the normal quarantine run.  Design rule kept: the web page only
+records, scripts change the archive.  The composite logic lives in `app/besttake.py`.

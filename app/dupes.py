@@ -69,6 +69,16 @@ CREATE TABLE IF NOT EXISTS dup_exclude (        -- copies you said to leave alon
   set_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ql_batch ON quarantine_log(batch);
+CREATE TABLE IF NOT EXISTS besttake_approval (  -- Best Takes you approved on the Review page
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  gid INTEGER,                                  -- group number when it was made
+  out_rel TEXT NOT NULL,                        -- the made picture, relative to the derived folder
+  base TEXT, swaps TEXT, made_from TEXT,        -- provenance (JSON for swaps and made_from)
+  mode TEXT NOT NULL,                           -- add | add_discard
+  approved_at TEXT NOT NULL,
+  used_at TEXT,                                 -- set by scripts/best_take.py --apply
+  archive_path TEXT                             -- where it went, relative to originals/
+);
 CREATE TABLE IF NOT EXISTS sim_mark (           -- your picks on the near-duplicate Review page
   path TEXT PRIMARY KEY,                        -- relative path, same as files.path
   mark TEXT NOT NULL,                           -- keep | discard

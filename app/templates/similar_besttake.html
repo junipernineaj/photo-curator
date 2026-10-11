@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Best Take · Photo Curator{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="/similar/review">&larr; Review</a></p>
+<h1>Best Take · group {{ gid }}</h1>
+{% if msg %}<p class="notice">{{ msg }}</p>{% endif %}
+{% if meta %}
+<p class="muted">The frame with the fewest closed eyes is the base. Each head with closed eyes has been replaced by the
+same person's head from another frame where their eyes are open. Real pixels only; your originals are untouched.
+Left: the base. Right: the new picture, with swapped heads outlined in yellow.</p>
+<p><img src="/derived/{{ meta.compare_rel }}" alt="Before and after" style="max-width:100%"></p>
+<p class="small">Base frame: <span class="mono">{{ meta.base }}</span><br>
+  {% for s in meta.swaps %}Head taken from <span class="mono">{{ s['from'] }}</span><br>{% endfor %}
+  <a href="/derived/{{ meta.out_rel }}" target="_blank" rel="noopener">Open the new picture at full size &nearr;</a></p>
+{% if approval and not approval.used_at %}
+<p class="notice">Approved ({{ 'add and discard the other frames' if approval.mode == 'add_discard' else 'add to the archive' }}).
+  On the server run <code>scripts/best_take.py --apply</code>.
+  {% if approval.mode == 'add_discard' %}Then <code>scripts/quarantine.py</code> (dry run first) moves the other frames.{% endif %}</p>
+<form method="post" action="/similar/besttake/{{ gid }}/withdraw"><button type="submit">Withdraw approval</button></form>
+{% elif approval and approval.used_at %}
+<p class="notice">Added to the archive as <span class="mono">{{ approval.archive_path }}</span>.</p>
+{% else %}
+<div class="revbar">
+  <form method="post" action="/similar/besttake/{{ gid }}/approve">
+    <input type="hidden" name="mode" value="add"><button type="submit">Add to the archive (keep all the frames too)</button></form>
+  <form method="post" action="/similar/besttake/{{ gid }}/approve">
+    <input type="hidden" name="mode" value="add_discard"><button type="submit">Add to the archive and discard the other frames</button></form>
+  <a href="/similar/besttake/{{ gid }}?redo=1">Make it again</a>
+</div>
+<p class="muted small">Approving records your choice only. <code>scripts/best_take.py --apply</code> copies the picture into
+<span class="mono">originals/best-take/</span> with a note of which frames it came from. Discarded frames go to quarantine, restorable
+for 30 days, like every other discard.</p>
+{% endif %}
+{% else %}
+<p>No Best Take could be made for this group.</p>
+{% if problem %}<p class="notice">{{ problem }}</p>{% endif %}
+{% for n in notes %}<p class="small muted">{{ n }}</p>{% endfor %}
+{% endif %}
+{% endblock %}

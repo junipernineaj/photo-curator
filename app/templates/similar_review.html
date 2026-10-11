@@ -77,6 +77,7 @@ photos, or <b>Decide later</b> to come back to a group. Nothing is recorded unti
     </div>
     <p class="small">
       <button type="button" class="lookbtn">Look closer (compare)</button> &nbsp;
+      {% if g.can_besttake %}<a href="/similar/besttake/{{ g.id }}" target="_blank" rel="noopener">Best Take: fix closed eyes &nearr;</a> &nbsp;{% endif %}
       <label><input type="radio" name="pick{{ g.id }}" value="all" {% if g.chosen == 'all' %}checked{% endif %}> Keep all (different photos)</label>
       &nbsp; <label><input type="radio" name="pick{{ g.id }}" value="later"> Decide later</label>
     </p>

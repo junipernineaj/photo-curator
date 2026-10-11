@@ -143,6 +143,7 @@ SOURCE_LABELS = {
     "photos-catchall": "Old photo folders",
     "google": "Google Photos",
     "scans": "Scanned prints",
+    "best-take": "Best Take (assembled from burst frames)",
 }
 SOURCE_EXPR = ("CASE WHEN instr(path, '/') > 0 THEN substr(path, 1, instr(path, '/') - 1) "
                "ELSE '' END")
@@ -708,7 +709,9 @@ def similar_review(request: Request, db=Depends(get_db), kind: str = "", view: s
             chosen = sug
         info = db.execute("SELECT span_s FROM sim.sim_info WHERE group_id = ?", (gid,)).fetchone()
         labels = sorted({m["src_label"] for m in members})
-        groups.append({"id": gid, "members": members, "suggested": sug, "chosen": chosen,
+        can_bt = sum(1 for m in members if m["faces"] is not None) >= 2 and \
+            any((m["eyes_closed"] or 0) > 0 for m in members)
+        groups.append({"id": gid, "members": members, "suggested": sug, "chosen": chosen, "can_besttake": can_bt,
                        "decided": all(m["mark"] for m in members),
                        "span": info["span_s"] if info else None,
                        "sources": labels if len(labels) > 1 else []})
@@ -788,6 +791,94 @@ async def similar_decide(request: Request, db=Depends(get_db)):
         text += f" {skipped} group{'' if skipped == 1 else 's'} changed since the page loaded and were left alone."
     sep = "&" if "?" in back else "?"
     return RedirectResponse(f"{back}{sep}" + urlencode({"start": start + stays, "msg": text}), status_code=303)
+
+
+# ---- Best Take: one picture from a burst with everyone's eyes open ----
+
+def bt_dir():
+    return os.path.join(DERIVED, "best-take")
+
+
+def bt_meta(gid):
+    try:
+        with open(os.path.join(bt_dir(), f"group-{gid}.json")) as f:
+            meta = json.load(f)
+        return meta if os.path.isfile(os.path.join(DERIVED, meta["out_rel"])) else None
+    except (OSError, ValueError, KeyError):
+        return None
+
+
+@app.get("/similar/besttake/{gid}", response_class=HTMLResponse)
+def similar_besttake(request: Request, gid: int, db=Depends(get_db), redo: int = 0, msg: str = ""):
+    meta, notes, problem = (None if redo else bt_meta(gid)), [], ""
+    if meta is None:
+        try:
+            from . import besttake
+        except ImportError:
+            besttake = None
+            problem = ("OpenCV is not installed for the web app. Run  ~/venvs/curator/bin/pip install "
+                       "opencv-python-headless  then restart the app.")
+        if besttake:
+            rows = db.execute(
+                "SELECT g.path, v.detail, h.sharp FROM sim.sim_group g JOIN sim.vision v ON v.path = g.path "
+                "AND v.status = 'ok' AND v.detail IS NOT NULL LEFT JOIN sim.hashes h ON h.path = g.path "
+                "WHERE g.group_id = ?", (gid,)).fetchall()
+            members = [{"path": r[0], "faces": json.loads(r[1]), "sharp": r[2] or 0} for r in rows]
+            if len(members) < 2:
+                problem = "This group has fewer than two photos with eye data. Run scripts/vision_check.py first."
+            else:
+                res = besttake.make(ARCHIVE, bt_dir(), members, log=notes.append)
+                if res:
+                    meta = {"out_rel": os.path.relpath(res["out"], DERIVED),
+                            "compare_rel": os.path.relpath(res["compare"], DERIVED), "base": res["base"],
+                            "swaps": res["swaps"], "made_from": res["made_from"], "gid": gid,
+                            "made_at": datetime.now().isoformat(timespec="seconds")}
+                    with open(os.path.join(bt_dir(), f"group-{gid}.json"), "w") as f:
+                        json.dump(meta, f)
+    approval = None
+    if meta:
+        approval = db.execute("SELECT mode, used_at, archive_path FROM ed.besttake_approval WHERE out_rel = ? "
+                              "ORDER BY id DESC LIMIT 1", (meta["out_rel"],)).fetchone()
+    return templates.TemplateResponse(request, "similar_besttake.html", {
+        "gid": gid, "meta": meta, "notes": notes, "problem": problem, "approval": approval, "msg": msg})
+
+
+@app.post("/similar/besttake/{gid}/approve")
+async def besttake_approve(request: Request, gid: int):
+    if not same_origin(request):
+        raise HTTPException(403, "Cross-site request refused")
+    form = await read_form(request)
+    meta = bt_meta(gid)
+    mode = form.get("mode", "")
+    if not meta or mode not in ("add", "add_discard"):
+        return RedirectResponse(f"/similar/besttake/{gid}?msg=Nothing+to+approve", status_code=303)
+    con = sqlite3.connect(EDITS)
+    try:
+        con.execute("DELETE FROM besttake_approval WHERE out_rel = ? AND used_at IS NULL", (meta["out_rel"],))
+        con.execute("INSERT INTO besttake_approval(gid, out_rel, base, swaps, made_from, mode, approved_at) "
+                    "VALUES (?,?,?,?,?,?,?)",
+                    (gid, meta["out_rel"], meta["base"], json.dumps(meta["swaps"]), json.dumps(meta["made_from"]),
+                     mode, datetime.now().isoformat(timespec="seconds")))
+        con.commit()
+    finally:
+        con.close()
+    return RedirectResponse(f"/similar/besttake/{gid}?" + urlencode(
+        {"msg": "Approved. Nothing is added until you run scripts/best_take.py --apply"}), status_code=303)
+
+
+@app.post("/similar/besttake/{gid}/withdraw")
+async def besttake_withdraw(request: Request, gid: int):
+    if not same_origin(request):
+        raise HTTPException(403, "Cross-site request refused")
+    meta = bt_meta(gid)
+    if meta:
+        con = sqlite3.connect(EDITS)
+        try:
+            con.execute("DELETE FROM besttake_approval WHERE out_rel = ? AND used_at IS NULL", (meta["out_rel"],))
+            con.commit()
+        finally:
+            con.close()
+    return RedirectResponse(f"/similar/besttake/{gid}?msg=Approval+withdrawn", status_code=303)
 
 
 # ---- manual date corrections (written to the separate edits file, never to photos) ----

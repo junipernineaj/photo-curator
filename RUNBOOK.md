@@ -417,20 +417,29 @@ By default only burst groups are checked (one source, shot within 10 seconds), b
 have the same eyes; `--only all` does every group.  Photos are done in the order the Review page shows them.  Results are in `curator_similar.sqlite`
 (table `vision`), so they survive a re-run of find_similar.py.
 
-### Best Take (prototype, scripts/best_take.py)
+### Best Take (Review page link, scripts/best_take.py)
 
 Builds one picture from a burst in which everyone's eyes are open, using the head boxes and eye states from
 `vision_check.py`: the frame with the fewest closed eyes is the base, other frames are lined up with it, and
 each head with closed eyes is replaced by the same person's head from a frame where the eyes are open.
-Real pixels only; nothing is generated.  Originals are never touched; results go in `<archive>/derived/best-take/`.
+Real pixels only; nothing is generated.  Originals are never touched.
 
-    ~/venvs/curator/bin/pip install opencv-python-headless    # once
-    scripts/best_take.py --list                # groups with eye data and at least one closed eye
-    scripts/best_take.py --group 4321          # group numbers are on the Review page headings
+1. On the Review page, a group with a closed eye has a **Best Take: fix closed eyes** link (opens in a new tab).
+   It builds the picture (a few seconds) and shows before | after with swapped heads outlined in yellow.
+   Needs OpenCV in the app's environment: `~/venvs/curator/bin/pip install opencv-python-headless`, then restart the app.
+2. Press **Add to the archive** (keep all the frames too) or **Add to the archive and discard the other frames**.
+   This only records your choice.
+3. On the server: `scripts/best_take.py --apply` copies the picture into `originals/best-take/` (never overwriting,
+   with a `.provenance.json` saying which frames it came from; EXIF copied from the base, so date, place and camera
+   are kept) and scans, so it appears on the Photos page as source "Best Take".  For "discard the other frames" the
+   burst frames are marked discard on the Review page, with the new picture as keeper.
+4. If you chose discard: `scripts/quarantine.py` (dry run), then `--apply`, then `scripts/scan_archive.py`.
+   The usual 30-day restore applies.
 
-It writes `NAME_besttake.jpg`, `NAME_compare.jpg` (before | after, swapped heads outlined) and a `.json` of
-where each head came from.  View them at `http://SERVER:8090/derived/best-take/NAME_compare.jpg`.
-Limits: people who moved between frames, hair against background, and loose head boxes give visible seams.
+The command-line half: `scripts/best_take.py --list` (groups with a closed eye) and `--group N` (make one into
+`<archive>/derived/best-take/`; files named NAME_besttake.jpg, NAME_compare.jpg).  If more than 70% of faces in a
+group are marked closed the eye data is not trusted and nothing is made.
+Limits: people who moved between frames, hair against background and loose head boxes can give visible seams.
 
 ## Bringing in an old photo folder, and retiring it
 
