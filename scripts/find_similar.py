@@ -13,6 +13,17 @@ import argparse
 import os
 import sys
 
+# Needs Pillow, which lives in the project venv. If this was started with the system Python,
+# hand over to the venv's Python instead of failing.
+VENV_PY = os.path.expanduser(os.environ.get("CURATOR_VENV", "~/venvs/curator") + "/bin/python")
+try:
+    import PIL  # noqa: F401
+except ImportError:
+    if os.path.exists(VENV_PY) and os.path.realpath(sys.executable) != os.path.realpath(VENV_PY):
+        os.execv(VENV_PY, [VENV_PY] + sys.argv)
+    sys.exit("Pillow is missing. Run: python3 -m venv ~/venvs/curator && "
+             "~/venvs/curator/bin/pip install -r requirements.txt")
+
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from app import similar  # noqa: E402
 
