@@ -376,3 +376,10 @@ for non-identical photos: re-hash against the index, keeper must be unchanged an
 discarded Live Photo's video moves with its still.  Suggested keeper: size, then has location, then Live,
 then sharpness.  Open: carry a location across to a keeper that lacks one; bulk-accept for large
 "same photo in several sources" lists, if Tony wants it.
+
+Later the same morning: Tony found it hard to pick the best frame and the one where everyone's eyes are
+open, and chose a Qwen vision model on the server GPU over a face-landmark library ("it pays its way").
+Added the in-page viewer and `scripts/vision_check.py` (Ollama, structured JSON: faces, eyes closed,
+looking away, note), shown on the Review cards and used first in the suggested keeper.  Same morning: the
+photo page Back button now works when opened in a new tab.  Open: how reliable the model is on small faces
+(to be judged on a trial of 20); later reuse of the same model for tagging.

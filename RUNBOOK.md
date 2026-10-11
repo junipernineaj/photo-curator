@@ -397,6 +397,21 @@ Photo's video moves with it; sidecars travel too.  A hand-set date on the discar
 keeper if the keeper has none.  Restore works as for exact duplicates (`--restore BATCH`), and the same
 30-day purge rule applies.  Not done yet: carrying a location from a discarded photo to a keeper without one.
 
+### Who has their eyes open (scripts/vision_check.py)
+
+Uses a local vision model in your own Ollama (for example Qwen2.5-VL); photos go only to localhost.
+For each photo in a near-duplicate group it records faces seen, eyes closed, looking away and a short note.
+The Review page shows it on each card and the suggested keeper prefers the fewest closed eyes.
+It is advice: the model can miscount small faces, so look before you keep.
+
+    scripts/vision_check.py --list-models      # what Ollama has installed
+    scripts/vision_check.py --limit 20         # try 20 photos, prints each answer
+    scripts/vision_check.py                    # everything in groups you have not decided (resumable)
+    scripts/vision_check.py --model NAME       # choose the model (default: first vision model found)
+
+Photos are done in the order the Review page shows them.  Results are in `curator_similar.sqlite`
+(table `vision`), so they survive a re-run of find_similar.py.
+
 ## Bringing in an old photo folder, and retiring it
 
 Old backup folders found on other disks (for example `/media/aj9/Juniper13/Pictures`, 53GB)

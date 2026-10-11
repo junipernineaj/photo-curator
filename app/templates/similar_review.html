@@ -16,7 +16,7 @@
 {% else %}
 <p class="muted">For each group, click the picture you want to keep. The others are marked to go to quarantine
 (restorable for 30 days; nothing is deleted). The suggestion is preselected: the biggest picture, then the one
-with a location, then a Live Photo, then the sharpest. Choose <b>Keep all</b> if they are genuinely different
+with a location, then a Live Photo, then the sharpest. If the vision check has run, fewer closed eyes come first. Choose <b>Keep all</b> if they are genuinely different
 photos, or <b>Decide later</b> to come back to a group. Nothing is recorded until you press Save.</p>
 <p class="count">{{ "{:,}".format(done) }} of {{ "{:,}".format(total) }} groups decided
   <span class="muted">· {{ "{:,}".format(shown) }} in this list</span></p>
@@ -54,7 +54,7 @@ photos, or <b>Decide later</b> to come back to a group. Nothing is recorded unti
       <span class="muted small">· {% if g.sources %}in {{ g.sources | join(' + ') }} · {% endif %}{{ g.span | span }}{% if g.decided %} · decided{% endif %}</span></h3>
     <div class="cards">
       {% for m in g.members %}
-      <div class="card" data-path="{{ m.path }}" data-id="{{ m.id }}" data-info="{{ m.src_label }} · {% if m.width %}{{ m.width }}×{{ m.height }} · {% endif %}{{ m.size | human }}{% if m.sharp is not none %} · sharp {{ m.sharp | round | int }}{% endif %}">
+      <div class="card" data-path="{{ m.path }}" data-id="{{ m.id }}" data-info="{% if m.faces is not none %}{{ m.faces }} faces, {{ m.eyes_closed }} eyes closed · {% endif %}{{ m.src_label }} · {% if m.width %}{{ m.width }}×{{ m.height }} · {% endif %}{{ m.size | human }}{% if m.sharp is not none %} · sharp {{ m.sharp | round | int }}{% endif %}">
         <input type="hidden" name="m{{ g.id }}" value="{{ m.path }}">
         <img class="thumbimg" loading="lazy" src="/thumb/{{ m.id }}" alt="{{ m.path }}" title="Click to look closer">
         <label class="pick">
@@ -67,6 +67,8 @@ photos, or <b>Decide later</b> to come back to a group. Nothing is recorded unti
           {% if m.has_geo %}<span class="tag">📍 location</span>{% endif %}
           {% if m.is_sharpest %}<span class="tag">sharpest</span>{% endif %}
         </p>
+        {% if m.faces is not none %}<p class="small">👁 {{ m.faces }} face{{ '' if m.faces == 1 else 's' }}{% if m.faces %}
+          · <span class="{{ 'warn' if m.eyes_closed else '' }}">{{ m.eyes_closed }} eyes closed</span>{% if m.looking_away %} · {{ m.looking_away }} looking away{% endif %}{% endif %}{% if m.vnote %}<br><span class="muted">{{ m.vnote }}</span>{% endif %}</p>{% endif %}
         <p class="small">{{ m.src_label }}<br>{% if m.width %}{{ m.width }}×{{ m.height }} · {% endif %}{{ m.size | human }}{% if m.sharp is not none %} · sharp {{ m.sharp | round | int }}{% endif %}<br>
           {{ m.taken_at | day }} · <a href="/photo/{{ m.id }}" target="_blank" rel="noopener">open ↗</a></p>
         <p class="small mono path">{{ m.path }}</p>

@@ -41,6 +41,15 @@ CREATE TABLE IF NOT EXISTS sim_info (
 );
 CREATE INDEX IF NOT EXISTS idx_sim_path ON sim_group(path);
 CREATE TABLE IF NOT EXISTS sim_meta (k TEXT PRIMARY KEY, v TEXT);
+CREATE TABLE IF NOT EXISTS vision (            -- what a local vision model said about the people in a photo
+  path TEXT PRIMARY KEY,
+  size INTEGER NOT NULL, mtime_ns INTEGER NOT NULL,   -- file as it was when looked at
+  model TEXT NOT NULL,
+  status TEXT NOT NULL,                         -- ok | failed
+  faces INTEGER, eyes_closed INTEGER, looking_away INTEGER,
+  note TEXT,
+  seen_at TEXT NOT NULL
+);
 """
 
 

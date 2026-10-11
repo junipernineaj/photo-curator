@@ -627,8 +627,9 @@ def review_filters(kind, view):
 
 
 def suggest_keeper(members):
-    """Largest picture; on a tie the one with a location, then a Live Photo, then the sharpest."""
-    return max(members, key=lambda m: ((m["width"] or 0) * (m["height"] or 0), m["has_geo"],
+    """Fewest closed eyes (if the vision check has run), then the largest picture; on a tie the one
+    with a location, then a Live Photo, then the sharpest."""
+    return max(members, key=lambda m: (-(m["eyes_closed"] or 0), (m["width"] or 0) * (m["height"] or 0), m["has_geo"],
                                        1 if m["pair_key"] else 0, m["sharp"] if m["sharp"] is not None else -1,
                                        m["size"]))["path"]
 
@@ -652,9 +653,11 @@ def similar_review(request: Request, db=Depends(get_db), kind: str = "", view: s
     for gid in gids:
         rows = db.execute(
             f"SELECT f.id, f.path, f.kind, f.size, f.width, f.height, f.taken_at, f.pair_key, {geo} AS has_geo, "
-            f"g.is_best, g.is_sharpest, h.sharp, m.mark, m.keeper "
+            f"g.is_best, g.is_sharpest, h.sharp, m.mark, m.keeper, "
+            f"v.faces, v.eyes_closed, v.looking_away, v.note AS vnote "
             f"FROM sim.sim_group g JOIN {FILES} f ON f.path = g.path JOIN main.files mf ON mf.id = f.id "
             f"LEFT JOIN sim.hashes h ON h.path = g.path LEFT JOIN ed.sim_mark m ON m.path = g.path "
+            f"LEFT JOIN sim.vision v ON v.path = g.path AND v.status = 'ok' "
             f"WHERE g.group_id = ? ORDER BY f.path", (gid,)).fetchall()
         members = []
         for r in rows:

@@ -107,3 +107,5 @@ img.pop{display:block;width:140px;height:auto;border-radius:4px}
 #vstrip img{height:56px;border:2px solid transparent;border-radius:4px;cursor:pointer;opacity:.9}
 #vstrip img.cur{border-color:var(--accent)} #vstrip img.dropped{opacity:.4}
 .vhint{text-align:center;margin:2px 0 8px;color:#aaa;font-size:12px}
+
+.warn{color:#e5484d;font-weight:700}
