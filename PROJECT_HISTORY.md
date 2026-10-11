@@ -365,3 +365,14 @@ Built the Map (scan `--regeo`, Takeout location files, Leaflet map with server-s
 
 **Decision (11 Oct, Tony): in the near-duplicate Review page, when copies tie on keeper score, the copy with a GPS location wins.**
 If the kept copy has no location but a rejected copy does, the page offers to carry the location across (stored in the edits file).
+
+## 11 Oct (late morning): near-duplicate Review page
+
+Tony: "I essentially want to pick the one I want and discard the rest to quarantine also."  Built
+`/similar/review` (pick a keeper per group, Keep all, Decide later, filters, 5-50 groups per page) and
+extended `scripts/quarantine.py` so the same batch also moves the photos marked discard.  Picks live in
+the edits file (`sim_mark`), keyed by path, so a re-run of find_similar does not lose them.  Extra checks
+for non-identical photos: re-hash against the index, keeper must be unchanged and still marked keep, a
+discarded Live Photo's video moves with its still.  Suggested keeper: size, then has location, then Live,
+then sharpness.  Open: carry a location across to a keeper that lacks one; bulk-accept for large
+"same photo in several sources" lists, if Tony wants it.

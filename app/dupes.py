@@ -69,6 +69,13 @@ CREATE TABLE IF NOT EXISTS dup_exclude (        -- copies you said to leave alon
   set_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ql_batch ON quarantine_log(batch);
+CREATE TABLE IF NOT EXISTS sim_mark (           -- your picks on the near-duplicate Review page
+  path TEXT PRIMARY KEY,                        -- relative path, same as files.path
+  mark TEXT NOT NULL,                           -- keep | discard
+  keeper TEXT,                                  -- for discard: the photo you picked to stay
+  set_at TEXT NOT NULL,
+  used_batch TEXT                               -- set by quarantine.py when it has moved the file
+);
 """
 
 

@@ -603,6 +603,155 @@ def similar_page(request: Request, db=Depends(get_db), page: int = 1, kind: str 
         "prev_url": "/similar?" + urlencode({**q, "page": page - 1}) if page > 1 else None})
 
 
+# ---- near-duplicate Review: pick the one to keep, the rest go to quarantine ----
+# The page only RECORDS picks (table sim_mark in the edits file).  scripts/quarantine.py --apply
+# is what moves files, and it re-checks everything first.
+
+REVIEW_PER = (5, 10, 25, 50)
+
+
+def review_filters(kind, view):
+    where, having = [], ["SUM(m.path IS NULL) > 0" if view != "decided" else "SUM(m.path IS NULL) = 0"]
+    src_g = ("CASE WHEN instr(g.path, '/') > 0 THEN substr(g.path, 1, instr(g.path, '/') - 1) "
+             "ELSE '' END")
+    if kind == "cross":
+        having.append(f"COUNT(DISTINCT {src_g}) > 1")
+    elif kind == "burst":
+        where.append("i.span_s IS NOT NULL AND i.span_s <= 10")
+        having.append(f"COUNT(DISTINCT {src_g}) = 1")
+    elif kind == "spread":
+        where.append("i.span_s > 10")
+    elif kind == "unknown":
+        where.append("i.span_s IS NULL")
+    return (("WHERE " + " AND ".join(where)) if where else ""), "HAVING " + " AND ".join(having)
+
+
+def suggest_keeper(members):
+    """Largest picture; on a tie the one with a location, then a Live Photo, then the sharpest."""
+    return max(members, key=lambda m: ((m["width"] or 0) * (m["height"] or 0), m["has_geo"],
+                                       1 if m["pair_key"] else 0, m["sharp"] if m["sharp"] is not None else -1,
+                                       m["size"]))["path"]
+
+
+@app.get("/similar/review", response_class=HTMLResponse)
+def similar_review(request: Request, db=Depends(get_db), kind: str = "", view: str = "pending",
+                   order: str = "space", start: int = 0, per: int = 10, msg: str = ""):
+    per = per if per in REVIEW_PER else 10
+    start = max(start, 0)
+    built = db.execute("SELECT v FROM sim.sim_meta WHERE k = 'built_at'").fetchone()
+    where, having = review_filters(kind, view)
+    base = (f"FROM sim.sim_group g JOIN {FILES} f ON f.path = g.path "
+            f"LEFT JOIN sim.sim_info i ON i.group_id = g.group_id "
+            f"LEFT JOIN ed.sim_mark m ON m.path = g.path {where} GROUP BY g.group_id {having}")
+    shown = db.execute(f"SELECT COUNT(*) FROM (SELECT g.group_id {base})").fetchone()[0]
+    sort = ("g.group_id" if order == "group"
+            else "SUM(f.size) - SUM(CASE WHEN g.is_best = 1 THEN f.size ELSE 0 END) DESC, g.group_id")
+    gids = [r[0] for r in db.execute(f"SELECT g.group_id {base} ORDER BY {sort} LIMIT ? OFFSET ?", (per, start))]
+    geo = "mf.lat IS NOT NULL" if geo_ready(db) else "0"
+    groups = []
+    for gid in gids:
+        rows = db.execute(
+            f"SELECT f.id, f.path, f.kind, f.size, f.width, f.height, f.taken_at, f.pair_key, {geo} AS has_geo, "
+            f"g.is_best, g.is_sharpest, h.sharp, m.mark, m.keeper "
+            f"FROM sim.sim_group g JOIN {FILES} f ON f.path = g.path JOIN main.files mf ON mf.id = f.id "
+            f"LEFT JOIN sim.hashes h ON h.path = g.path LEFT JOIN ed.sim_mark m ON m.path = g.path "
+            f"WHERE g.group_id = ? ORDER BY f.path", (gid,)).fetchall()
+        members = []
+        for r in rows:
+            top = r["path"].split("/")[0] if "/" in r["path"] else ""
+            members.append({**dict(r), "src_label": SOURCE_LABELS.get(top, top or "(top level)")})
+        sug = suggest_keeper(members)
+        keeps = [m["path"] for m in members if m["mark"] == "keep"]
+        if all(m["mark"] == "keep" for m in members):
+            chosen = "all"
+        elif len(keeps) == 1 and all(m["mark"] for m in members):
+            chosen = keeps[0]
+        else:
+            chosen = sug
+        info = db.execute("SELECT span_s FROM sim.sim_info WHERE group_id = ?", (gid,)).fetchone()
+        labels = sorted({m["src_label"] for m in members})
+        groups.append({"id": gid, "members": members, "suggested": sug, "chosen": chosen,
+                       "decided": all(m["mark"] for m in members),
+                       "span": info["span_s"] if info else None,
+                       "sources": labels if len(labels) > 1 else []})
+    pend = db.execute("SELECT COUNT(*), COALESCE(SUM(f.size), 0) FROM ed.sim_mark m JOIN main.files f "
+                      "ON f.path = m.path WHERE m.mark = 'discard' AND m.used_batch IS NULL").fetchone()
+    total = db.execute("SELECT COUNT(DISTINCT group_id) FROM sim.sim_group").fetchone()[0]
+    done = db.execute("SELECT COUNT(*) FROM (SELECT g.group_id FROM sim.sim_group g LEFT JOIN ed.sim_mark m "
+                      "ON m.path = g.path GROUP BY g.group_id HAVING SUM(m.path IS NULL) = 0)").fetchone()[0]
+    f = {"kind": kind, "view": view, "order": order, "per": per}
+    q = urlencode({k: v for k, v in f.items() if v})
+    nxt = start + len(gids)
+    return templates.TemplateResponse(request, "similar_review.html", {
+        "groups": groups, "f": f, "built": built[0] if built else None, "shown": shown, "start": start,
+        "pend_n": pend[0], "pend_bytes": pend[1], "total": total, "done": done, "msg": msg,
+        "back": "/similar/review?" + q,
+        "next_url": f"/similar/review?{q}&start={nxt}" if nxt < shown else None,
+        "prev_url": f"/similar/review?{q}&start={max(start - per, 0)}" if start > 0 else None})
+
+
+@app.post("/similar/decide")
+async def similar_decide(request: Request, db=Depends(get_db)):
+    if not same_origin(request):
+        raise HTTPException(403, "Cross-site request refused")
+    qs = parse_qs((await request.body()).decode("utf-8", "replace"), keep_blank_values=True)
+    one = lambda k, d="": qs.get(k, [d])[0]
+    view = one("view", "pending")
+    start = int(one("start", "0")) if one("start", "0").isdigit() else 0
+    now = datetime.now().isoformat(timespec="seconds")
+    marks, clears = [], []
+    stays = skipped = groups_saved = 0
+    for gid in qs.get("g", []):
+        paths = list(dict.fromkeys(qs.get(f"m{gid}", [])))
+        pick = one(f"pick{gid}", "later")
+        ok = 2 <= len(paths) <= 80
+        if ok:
+            ph = ",".join("?" * len(paths))
+            in_group = db.execute(f"SELECT COUNT(DISTINCT group_id), COUNT(*) FROM sim.sim_group "
+                                  f"WHERE path IN ({ph})", paths).fetchone()
+            whole = db.execute("SELECT COUNT(*) FROM sim.sim_group WHERE group_id = "
+                               "(SELECT group_id FROM sim.sim_group WHERE path = ?)", (paths[0],)).fetchone()[0]
+            indexed = db.execute(f"SELECT COUNT(*) FROM main.files WHERE path IN ({ph})", paths).fetchone()[0]
+            used = db.execute(f"SELECT COUNT(*) FROM ed.sim_mark WHERE used_batch IS NOT NULL "
+                              f"AND path IN ({ph})", paths).fetchone()[0]
+            ok = in_group[0] == 1 and in_group[1] == len(paths) and whole == len(paths) \
+                and indexed == len(paths) and used == 0
+        if not ok:                                   # page is out of date: leave this group alone
+            skipped += 1
+            stays += 1
+            continue
+        if pick == "later":
+            clears.extend(paths)
+            stays += view != "decided"
+        elif pick == "all":
+            marks.extend((p, "keep", None, now) for p in paths)
+            groups_saved += 1
+            stays += view == "decided"
+        elif pick in paths:
+            marks.extend((p, "keep" if p == pick else "discard", None if p == pick else pick, now) for p in paths)
+            groups_saved += 1
+            stays += view == "decided"
+        else:
+            skipped += 1
+            stays += 1
+    con = sqlite3.connect(EDITS)
+    try:
+        con.executemany("DELETE FROM sim_mark WHERE path = ? AND used_batch IS NULL", [(p,) for p in clears])
+        con.executemany("INSERT OR REPLACE INTO sim_mark(path, mark, keeper, set_at) VALUES (?,?,?,?)", marks)
+        con.commit()
+    finally:
+        con.close()
+    back = one("back", "/similar/review")
+    if not back.startswith("/similar/review") or "//" in back or "\n" in back:
+        back = "/similar/review"
+    discards = sum(1 for m in marks if m[1] == "discard")
+    text = f"Saved {groups_saved} group{'' if groups_saved == 1 else 's'} ({discards} photo{'' if discards == 1 else 's'} marked to discard)."
+    if skipped:
+        text += f" {skipped} group{'' if skipped == 1 else 's'} changed since the page loaded and were left alone."
+    sep = "&" if "?" in back else "?"
+    return RedirectResponse(f"{back}{sep}" + urlencode({"start": start + stays, "msg": text}), status_code=303)
+
+
 # ---- manual date corrections (written to the separate edits file, never to photos) ----
 
 def parse_taken(text):

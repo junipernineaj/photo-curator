@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Pick keepers · Photo Curator{% endblock %}
+{% block content %}
+{% macro bar() %}
+<div class="revbar">
+  <button type="submit">Save these {{ groups | length }} choices</button>
+  <span class="small">{{ "{:,}".format(pend_n) }} photo{{ '' if pend_n == 1 else 's' }} ({{ pend_bytes | human }}) marked to discard so far
+    <span class="muted">· moves only when you run <code>scripts/quarantine.py --apply</code></span></span>
+</div>
+{% endmacro %}
+<p><a href="/similar">&larr; Similar</a></p>
+<h1>Pick the keeper</h1>
+{% if msg %}<p class="notice">{{ msg }}</p>{% endif %}
+{% if not built %}
+<p class="muted">Nothing here yet. Run <span class="mono">scripts/find_similar.py</span> on the server first.</p>
+{% else %}
+<p class="muted">For each group, click the picture you want to keep. The others are marked to go to quarantine
+(restorable for 30 days; nothing is deleted). The suggestion is preselected: the biggest picture, then the one
+with a location, then a Live Photo, then the sharpest. Choose <b>Keep all</b> if they are genuinely different
+photos, or <b>Decide later</b> to come back to a group. Nothing is recorded until you press Save.</p>
+<p class="count">{{ "{:,}".format(done) }} of {{ "{:,}".format(total) }} groups decided
+  <span class="muted">· {{ "{:,}".format(shown) }} in this list</span></p>
+<form class="filters" method="get" action="/similar/review">
+  <select name="view" aria-label="Which groups" onchange="this.form.submit()">
+    <option value="pending" {% if f.view != 'decided' %}selected{% endif %}>Still to decide</option>
+    <option value="decided" {% if f.view == 'decided' %}selected{% endif %}>Already decided (change your mind)</option>
+  </select>
+  <select name="kind" aria-label="Kind of group" onchange="this.form.submit()">
+    <option value="">All groups</option>
+    <option value="cross" {% if f.kind == 'cross' %}selected{% endif %}>Same photo in several sources (copies)</option>
+    <option value="burst" {% if f.kind == 'burst' %}selected{% endif %}>Bursts (one source, within 10 seconds)</option>
+    <option value="spread" {% if f.kind == 'spread' %}selected{% endif %}>Spread over time (likely copies)</option>
+    <option value="unknown" {% if f.kind == 'unknown' %}selected{% endif %}>Camera time unknown</option>
+  </select>
+  <select name="order" aria-label="Order" onchange="this.form.submit()">
+    <option value="space" {% if f.order != 'group' %}selected{% endif %}>Most spare space first</option>
+    <option value="group" {% if f.order == 'group' %}selected{% endif %}>Group number</option>
+  </select>
+  <select name="per" aria-label="Groups per page" onchange="this.form.submit()">
+    {% for n in (5, 10, 25, 50) %}<option value="{{ n }}" {% if f.per == n %}selected{% endif %}>{{ n }} per page</option>{% endfor %}
+  </select>
+</form>
+
+{% if groups %}
+<form method="post" action="/similar/decide" id="rv">
+  <input type="hidden" name="back" value="{{ back }}">
+  <input type="hidden" name="view" value="{{ f.view }}">
+  <input type="hidden" name="start" value="{{ start }}">
+  {{ bar() }}
+  {% for g in groups %}
+  <section class="dupgroup rvgroup">
+    <input type="hidden" name="g" value="{{ g.id }}">
+    <h3>Group {{ g.id }}: {{ g.members | length }} photos
+      <span class="muted small">· {% if g.sources %}in {{ g.sources | join(' + ') }} · {% endif %}{{ g.span | span }}{% if g.decided %} · decided{% endif %}</span></h3>
+    <div class="cards">
+      {% for m in g.members %}
+      <div class="card" data-path="{{ m.path }}">
+        <input type="hidden" name="m{{ g.id }}" value="{{ m.path }}">
+        <label class="pick">
+          <img loading="lazy" src="/thumb/{{ m.id }}" alt="{{ m.path }}">
+          <span class="radio"><input type="radio" name="pick{{ g.id }}" value="{{ m.path }}" {% if g.chosen == m.path %}checked{% endif %}>
+            <b class="keeptxt">Keep</b><b class="droptxt">Discard</b></span>
+        </label>
+        <p class="small">
+          {% if m.path == g.suggested %}<span class="badge big sug">SUGGESTED</span>{% endif %}
+          {% if m.pair_key %}<span class="tag">LIVE</span>{% endif %}
+          {% if m.has_geo %}<span class="tag">📍 location</span>{% endif %}
+          {% if m.is_sharpest %}<span class="tag">sharpest</span>{% endif %}
+        </p>
+        <p class="small">{{ m.src_label }}<br>{% if m.width %}{{ m.width }}×{{ m.height }} · {% endif %}{{ m.size | human }}{% if m.sharp is not none %} · sharp {{ m.sharp | round | int }}{% endif %}<br>
+          {{ m.taken_at | day }} · <a href="/photo/{{ m.id }}" target="_blank" rel="noopener">open ↗</a></p>
+        <p class="small mono path">{{ m.path }}</p>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="small">
+      <label><input type="radio" name="pick{{ g.id }}" value="all" {% if g.chosen == 'all' %}checked{% endif %}> Keep all (different photos)</label>
+      &nbsp; <label><input type="radio" name="pick{{ g.id }}" value="later"> Decide later</label>
+    </p>
+  </section>
+  {% endfor %}
+  {{ bar() }}
+</form>
+{% else %}
+<p class="notice small">{{ "{:,}".format(pend_n) }} photo{{ '' if pend_n == 1 else 's' }} ({{ pend_bytes | human }}) marked to discard so far
+  <span class="muted">· moves only when you run <code>scripts/quarantine.py --apply</code></span></p>
+<p class="empty">{% if f.view == 'decided' %}Nothing decided in this list yet.{% else %}No more groups to decide in this list.{% endif %}
+  {% if start > 0 %}<a href="/similar/review?{{ back.split('?', 1)[1] }}">Back to the start of the list</a>{% endif %}</p>
+{% endif %}
+<p class="pager">{% if prev_url %}<a href="{{ prev_url }}">&larr; Previous</a>{% endif %}
+  {% if next_url %}<a href="{{ next_url }}">Next &rarr;</a>{% endif %}</p>
+<script>
+document.querySelectorAll('.rvgroup').forEach(function (g) {
+  function upd() {
+    var r = g.querySelector('input[type=radio]:checked'), v = r ? r.value : '';
+    g.querySelectorAll('.card').forEach(function (c) {
+      c.classList.toggle('drop', v !== '' && v !== 'all' && v !== 'later' && c.dataset.path !== v);
+    });
+    g.classList.toggle('later', v === 'later');
+  }
+  g.addEventListener('change', upd); upd();
+});
+</script>
+{% endif %}
+{% endblock %}

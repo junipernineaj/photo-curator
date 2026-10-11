@@ -377,6 +377,26 @@ number (`/similar?group=192`).
   `find_similar.py`, which retries failed photos. Photos missing a few bytes at the end (9 Oct:
   92 Pixel burst covers, 37 bytes short) are now read anyway.
 
+## Choosing keepers among near-duplicates (Similar > "Pick the keepers")
+
+Page: `/similar/review`.  Each group of look-alike photos is shown side by side.  Click the one to keep;
+the others are marked **discard**.  The suggestion is preselected (biggest picture, then one with a
+location, then a Live Photo, then the sharpest).  Per group you can also choose **Keep all** (they are
+genuinely different) or **Decide later**.  Nothing is recorded until you press **Save**; the views
+"Still to decide" / "Already decided" let you change your mind before anything moves.
+
+Picks are stored in `curator_edits.sqlite` (table `sim_mark`).  The page never moves a file.  Run on the server:
+
+    scripts/quarantine.py            # dry run: also lists the near-duplicate picks
+    scripts/quarantine.py --apply    # one batch for both exact-duplicate rules and these picks
+    scripts/scan_archive.py && scripts/find_similar.py
+
+Safety: before a discarded photo moves, it is re-hashed against the index; the keeper you picked must
+still exist, be unchanged and still be marked keep (otherwise that photo is skipped).  A discarded Live
+Photo's video moves with it; sidecars travel too.  A hand-set date on the discarded photo is copied to the
+keeper if the keeper has none.  Restore works as for exact duplicates (`--restore BATCH`), and the same
+30-day purge rule applies.  Not done yet: carrying a location from a discarded photo to a keeper without one.
+
 ## Bringing in an old photo folder, and retiring it
 
 Old backup folders found on other disks (for example `/media/aj9/Juniper13/Pictures`, 53GB)
