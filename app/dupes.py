@@ -93,10 +93,12 @@ def src_rank(src):
 
 
 def keeper_key(row):
-    """Lower sorts first = preferred keeper: better source, has a sidecar, then the plainest
-    (shortest) file name, then path order for a stable result."""
+    """Lower sorts first = preferred keeper: a copy that belongs to a Live Photo pair (so the pair
+    is never split), then better source, has a sidecar, then the plainest (shortest) file name,
+    then path order for a stable result."""
     p = row["path"]
-    return (src_rank(src_of(p)), 0 if row["has_sidecar"] else 1, len(os.path.basename(p)), p)
+    return (0 if row["pair_key"] else 1, src_rank(src_of(p)), 0 if row["has_sidecar"] else 1,
+            len(os.path.basename(p)), p)
 
 
 def ensure_schema(path):

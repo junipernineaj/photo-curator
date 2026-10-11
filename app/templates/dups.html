@@ -2,8 +2,9 @@
 {% block title %}Duplicates · Photo Curator{% endblock %}
 {% block content %}
 <h1>Exact duplicates</h1>
-<p class="muted">Files with byte-for-byte identical content. This page only lists them;
-nothing is deleted. Near-duplicates (resized or re-saved copies) come later.</p>
+<p class="muted">Files with byte-for-byte identical content that are still in the archive (the first 200, largest
+first). This page only lists them; to clear them use <a href="/cleanup">Clean-up</a>, which moves the spare copies to a
+30-day quarantine. Near-duplicates (resized or re-saved copies) are on <a href="/similar">Similar</a>.</p>
 {% for g in groups %}
 <section class="dupgroup">
   <h3>{{ g.members | length }} copies · {{ g.size | human }}</h3>
