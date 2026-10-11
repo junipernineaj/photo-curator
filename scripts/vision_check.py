@@ -3,8 +3,8 @@
 
 For each photo in a near-duplicate group it works in two steps, because asking about a whole group
 photo at once over-counts faces and misses blinks: (1) the model finds each face and gives a box,
-(2) each face is cropped and the model says whether the eyes are open or closed and whether the person
-faces the camera.  It records faces, eyes closed, looking away and the face boxes (so the Review page
+(2) each face is cropped and the model says whether the eyes are open or closed.  It records
+faces, eyes closed and the face boxes (so the Review page
 can outline them: red = eyes closed).
 The Review page shows this on each card and prefers the frame with the fewest closed eyes.
 Advice only: it never changes a photo, and you still pick.
@@ -55,12 +55,10 @@ MODEL_TAG = "/faces-v2"        # stored with the model name; bump to redo everyt
 FIND_PROMPT = ("Locate every human face in the image, including small faces in the background. "
                "Output the bounding box of each face in JSON, like "
                "[{\"bbox_2d\": [x1, y1, x2, y2], \"label\": \"face\"}]. Output [] if there are no people.")
-EYES_PROMPT = ("The images are the faces of different people, numbered 1, 2, 3... in the order given. "
-               "For each person, answer on its own line in exactly this form: "
-               "<number>: <open|closed|unclear>, <camera|away>. "
-               "'closed' includes mid-blink; 'unclear' if the face is blurry, hidden, turned away or too small "
-               "to tell; 'camera' if they look towards the camera, 'away' if not. No other text.")
-LINE_RE = re.compile(r"(\d+)\D{0,4}?(open|closed|unclear)\W+(camera|away)", re.I)
+EYE_PROMPT = ("This is a close-up of one person's face. Look carefully at their eyes. "
+              "Are the eyes open (you can see the eyeballs) or closed (lids shut, or mid-blink)? "
+              "Answer with one word: OPEN, CLOSED or UNCLEAR (use UNCLEAR if the face is blurry, hidden, "
+              "turned away or the eyes are covered).")
 MAX_FACES = 12          # judge the biggest faces only
 MIN_FACE_PX = 32        # smaller than this (in the 1600px preview) is too small to judge
 SEND_LONG = 1400        # long side sent for face finding; a multiple of 28 so the model's coordinates match
@@ -145,26 +143,27 @@ def find_faces(url, model, im):
     return boxes
 
 
+RAW = False            # --raw: print the model's exact answers
+
+
 def judge_faces(url, model, im, boxes):
-    """One call with a crop per face -> list of (eyes, looking) in box order; unclear for tiny faces."""
+    """One call per face crop -> list of (eyes, looking); 'unclear' for tiny faces or unreadable answers."""
     w, h = im.size
-    out, crops, idx = [("unclear", "camera")] * len(boxes), [], []
-    for i, b in enumerate(boxes):
+    out = []
+    for b in boxes:
         bw, bh = (b[2] - b[0]) * w, (b[3] - b[1]) * h
         if min(bw, bh) < MIN_FACE_PX:
+            out.append(("unclear", "camera"))
             continue
-        px, py = bw * 0.3, bh * 0.3
+        px, py = bw * 0.15, bh * 0.15
         c = im.crop((max(0, int(b[0] * w - px)), max(0, int(b[1] * h - py)),
                      min(w, int(b[2] * w + px)), min(h, int(b[3] * h + py))))
         c.thumbnail((336, 336))
-        crops.append(jpeg_bytes(c))
-        idx.append(i)
-    if crops:
-        text = chat(url, model, EYES_PROMPT, crops, None, num_predict=24 * len(crops) + 40)
-        for n, eyes, look in LINE_RE.findall(text):
-            k = int(n) - 1
-            if 0 <= k < len(idx):
-                out[idx[k]] = (eyes.lower(), look.lower())
+        text = chat(url, model, EYE_PROMPT, [jpeg_bytes(c)], None, num_predict=12)
+        m = re.search(r"\b(open|closed|unclear)\b", text, re.I)
+        out.append((m.group(1).lower() if m else "unclear", "camera"))
+        if RAW:
+            print(f"      face {len(out)} ({int(bw)}x{int(bh)}px): {text.strip()!r}")
     return out
 
 
@@ -192,7 +191,10 @@ def main():
     ap.add_argument("--match", help="only photos whose path contains this text (e.g. 2017_07_29)")
     ap.add_argument("--workers", type=int, default=1, help="requests at once (1 is fine; try 2 on a big GPU)")
     ap.add_argument("--retry", action="store_true", help="try earlier failures again")
+    ap.add_argument("--raw", action="store_true", help="print the model's exact answer for each face")
     a = ap.parse_args()
+    global RAW
+    RAW = a.raw
     url = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
     if a.list_models:
         for m in ollama(url, "/api/tags", timeout=10).get("models", []):
