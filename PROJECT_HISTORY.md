@@ -395,3 +395,8 @@ asked how to do Apple. Wrote `scripts/cloud_clear_check.py`: a read-only readine
 deep check; Apple via an `osxphotos query --json` list from the Mac, which also preserves albums/favourites/people) that must
 say READY before anything is deleted from iCloud. Apple deletion method agreed: Photos on the Mac, staged by date, Hidden album
 too, Recently Deleted left for a while before emptying. Not run on the real data yet.
+
+07:30, 12 Oct: first full vision run: 21,946 photos, 7,766 with "faces", 5,133 "eyes closed" (49% of single-face photos, rising to
+93% at six faces: about half of all faces called closed). Tony checked 12 of the single-face flags: 11 were scenery. Cause: the
+model invents heads when asked to find them. Fix: YuNet face detector decides where faces are, Qwen only judges eyes; `--revalidate`
+repairs the old results; model tag `/faces-v5`. Review suggestion and Best Take should not be trusted on old results until revalidated.

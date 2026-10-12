@@ -624,3 +624,12 @@ listed as UNACCOUNTED and the verdict is NOT READY.
 4. The report is written to `cloud-clear-check-<time>.txt` beside the archive. Exit status 0 = ready, 1 = not ready, 2 = could not run.
 5. It cannot see the offsite drive, anything added to the cloud since the Takeout / the Mac's download, or devices that could
    re-upload: tick those yourself before deleting. Google's bin keeps deleted items 60 days; Apple's Recently Deleted about 30.
+
+#### Eye check, 12 Oct fix: faces now come from a detector
+Tony spot-checked 12 random "one face, eyes closed" photos: only 1 was a face, the rest were scenery. Asked to find every head, the
+vision model invents faces in scenery and calls about half of all faces "closed". Faces are now found by a small CPU detector
+(`app/facefind.py`, YuNet, model in `app/models/`), and Qwen is only asked open/closed on those crops (`/faces-v5`).
+Repair what was already done without rerunning the model: stop the job, `git pull`, then `scripts/vision_check.py --revalidate`
+(a few minutes). It keeps only faces the detector also sees and marks the model's verdict `unclear` where its box was not a crop
+of that one face. Then re-run `scripts/vision_check.py` to judge the faces that are still `unclear` (only real faces now: much
+quicker than before). Check the rate again with the by-face-count query; a believable blink rate is well under 15% for one face.
