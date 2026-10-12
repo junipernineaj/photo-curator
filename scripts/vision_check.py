@@ -7,8 +7,8 @@ For each photo in a near-duplicate group:
      scenery and plates of food.
  (2) a head turned well away from the camera is marked "looking away" and its eyes are not judged;
      faces too small to judge are marked unclear.
- (3) for the rest, a level close-up strip of just the two eyes is cut out and the model answers
-     OPEN, CLOSED or UNCLEAR.
+ (3) for the rest, a level close-up strip of just the two eyes is cut out (from the full-size photo when the
+     eyes are small in the 1600px preview) and the model answers OPEN, CLOSED or UNCLEAR.
 It records faces, eyes closed, looking away and the face boxes (so the Review page can outline them:
 red = eyes closed, grey = not judged).
 The Review page shows this on each card.  Advice only: it never changes a photo, and you still pick.
@@ -60,10 +60,11 @@ from app import facefind, similar, thumbs  # noqa: E402
 MODEL_TAG = "/faces-v6"        # stored with the model name; bump to redo everything after a method change
 EYE_PROMPT = ("This is a close-up strip showing one person's two eyes. Are the eyes open (you can see the "
               "dark iris or pupil of each eye) or closed (lids shut, or caught mid-blink)? "
-              "Answer with one word: OPEN, CLOSED or UNCLEAR (use UNCLEAR if the eyes are hidden by sunglasses, "
-              "glare, hair or blur, or you cannot tell).")
+              "First check that you can actually see the eyes themselves. Answer with one word: OPEN, CLOSED or "
+              "UNCLEAR (use UNCLEAR if the eyes are behind dark lenses, in deep shadow, covered by hair, "
+              "blurred, or you cannot tell).")
 MAX_FACES = 12          # judge the biggest faces only
-MIN_EYE_PX = 14         # eyes closer together than this (in the 1600px preview) are too small to judge
+MIN_EYE_PX = 26         # eyes closer together than this (pixels, in the preview or the full-size photo) are too small to judge
 AWAY_YAW = 0.45         # head turned further than this: eyes are not judged, the face is "looking away"
 
 
@@ -113,19 +114,18 @@ def chat(url, model, prompt, images, schema=None, num_predict=700):
 RAW = False            # --raw: print the model's exact answers
 
 
-def judge_faces(url, model, im, faces):
+def judge_faces(url, model, im, faces, load_full=None):
     """faces: [{'b': box, 'k': landmarks}] -> list of (eyes, looking).  Eyes open/closed are asked only for
     faces that are big enough and turned towards the camera; the model sees a strip of just the eyes."""
-    w, h = im.size
     out = []
     for f in faces:
-        g = facefind.geometry(f["k"], w, h)
+        src, g = facefind.strip_source(im, f["k"], load_full)
         if g["d"] < MIN_EYE_PX:
             out.append(("unclear", "camera"))
         elif abs(g["yaw"]) > AWAY_YAW:
             out.append(("unclear", "away"))
         else:
-            text = chat(url, model, EYE_PROMPT, [jpeg_bytes(facefind.eye_band(im, f["k"], g))], None, num_predict=12)
+            text = chat(url, model, EYE_PROMPT, [jpeg_bytes(facefind.eye_band(src, f["k"], g))], None, num_predict=12)
             m = re.search(r"\b(open|closed|unclear)\b", text, re.I)
             out.append((m.group(1).lower() if m else "unclear", "camera"))
             if RAW:
@@ -133,13 +133,13 @@ def judge_faces(url, model, im, faces):
     return out
 
 
-def ask(url, model, jpeg_path):
+def ask(url, model, jpeg_path, load_full=None):
     """-> (faces, eyes_closed, looking_away, note, detail_json)"""
     with Image.open(jpeg_path) as im0:
         im = im0.convert("RGB")
     found = facefind.detect(im)[:MAX_FACES]
     faces = [{"b": [round(v, 4) for v in b], "k": k} for b, _, k in found]
-    states = judge_faces(url, model, im, faces) if faces else []
+    states = judge_faces(url, model, im, faces, load_full) if faces else []
     closed = sum(1 for e, _ in states if e == "closed")
     away = sum(1 for _, lk in states if lk == "away")
     unclear = sum(1 for e, lk in states if e == "unclear" and lk != "away")
@@ -232,7 +232,7 @@ def main():
             return row, None, "could not make a preview"
         try:
             t = time.time()
-            return row, ask(url, model, jpg) + (time.time() - t,), None
+            return row, ask(url, model, jpg, facefind.make_loader(os.path.join(archive, path), ext)) + (time.time() - t,), None
         except (urllib.error.URLError, OSError, ValueError, KeyError) as e:
             return row, None, f"{type(e).__name__}: {e}"
 

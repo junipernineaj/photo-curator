@@ -82,8 +82,8 @@ def main():
         px, py = (b[2] - b[0]) * w * 0.3, (b[3] - b[1]) * h * 0.3
         face = im.crop((max(0, int(b[0] * w - px)), max(0, int(b[1] * h - py)), min(w, int(b[2] * w + px)), min(h, int(b[3] * h + py))))
         face.thumbnail((240, 240))
-        g = facefind.geometry(d["k"], w, h)
-        band = facefind.eye_band(im, d["k"], g, width=300)
+        src, g = facefind.strip_source(im, d["k"], facefind.make_loader(os.path.join(archive, path), ext))
+        band = facefind.eye_band(src, d["k"], g, width=300)
         cells.append(f'<div class="c"><img src="{data_uri(face)}"><br><img src="{data_uri(band)}"><br>'
                      f'<span>#{n + 1} turn {g["yaw"]:.2f}, eyes {int(g["d"])}px apart</span><br>'
                      f'<a href="/annotated/{fid}" target="_blank">whole photo</a> · {html.escape(os.path.basename(path))}</div>')

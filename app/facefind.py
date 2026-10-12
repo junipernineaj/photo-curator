@@ -72,3 +72,35 @@ def eye_band(im, k, g=None, width=448):
     c = sq.size[0] / 2
     band = sq.crop((int(c - cw), int(c - ch), int(c + cw), int(c + ch)))
     return band.resize((width, max(1, round(width * band.size[1] / max(1, band.size[0])))), Image.LANCZOS)
+
+
+FULLRES_BELOW = 45      # eyes closer than this (pixels, in the 1600px preview): cut the strip from the full-size photo
+
+
+def make_loader(abs_path, ext):
+    """A function that opens the full-size photo (upright, RGB) the first time it is called, and returns it
+    again after that; None if it cannot be read.  Only used for small faces, so most photos are never opened."""
+    box = []
+
+    def load():
+        if not box:
+            try:
+                from PIL import ImageOps
+                from . import thumbs
+                im = thumbs._open(abs_path, ext, False)
+                box.append(None if im is None else ImageOps.exif_transpose(im).convert("RGB"))
+            except Exception:
+                box.append(None)
+        return box[0]
+    return load
+
+
+def strip_source(im, k, load_full=None):
+    """-> (picture to cut the eye strip from, its geometry): the preview, or the full-size photo when the
+    eyes are small in the preview (the preview has too few pixels to see an eyelid)."""
+    g = geometry(k, *im.size)
+    if g["d"] < FULLRES_BELOW and load_full is not None:
+        full = load_full()
+        if full is not None and full.size[0] > im.size[0]:
+            return full, geometry(k, *full.size)
+    return im, g
