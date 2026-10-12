@@ -417,3 +417,10 @@ New habit needed: with Google backup gone, new iPhone photos exist only on the p
 
 10:50, 12 Oct: Review page ("Pick the keeper") now shows progress: a bar plus "NN.N% done, X of Y groups decided, Z left" under the heading, and a
 short "NN.N% decided - Z groups left" in the sticky bar that follows you down the page. A group counts as decided once every photo in it has a mark.
+
+11:30, 12 Oct: Review page ("Pick the keeper") reworked from pages of 10 with a Save button into one continuous list. Groups load 25 at a time as
+you scroll or move through them (no pages). In the close-up viewer, "Next group" (N or Enter) accepts what is selected and moves straight on, "Group"
+(P) goes back, K keeps the photo you are looking at and moves on, A keeps all, L decides later, S submits; the viewer no longer has to be closed
+between groups. A group is only recorded after you have been through it (or changed it, or used "Accept the suggestions shown"), and only when you
+press "Submit keepers", which saves in the background without reloading; saved groups fold up to one line. Progress bar and counts update on submit.
+Tested in headless Chromium against a 60-group fake archive. The old Save button/pager and the "per page" menu are gone.

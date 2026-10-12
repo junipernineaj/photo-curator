@@ -24,6 +24,15 @@ main{padding:16px;max-width:1500px;margin:0 auto}
 .progress{height:10px;background:var(--cell);border:1px solid var(--line);border-radius:6px;overflow:hidden;margin:8px 0 0}
 .progress-fill{height:100%;background:var(--accent);min-width:2px}
 .progress-mini{margin-left:auto;white-space:nowrap}
+.revbar button:disabled,.vbtns button:disabled{opacity:.5;cursor:default}
+button.quiet{background:none;border:1px solid var(--line);color:var(--ink)}
+.rvstate{color:var(--accent);font-weight:700}
+.rvgroup.reviewed{border-left:4px solid var(--accent);padding-left:8px}
+.rvgroup.saved{opacity:.6}
+.rvgroup.saved h3{cursor:pointer}
+.rvgroup.saved:not(.expand) .cards,.rvgroup.saved:not(.expand) .rvctl{display:none}
+.rvgroup.stale{outline:2px solid #e5484d}
+.vbtns{flex-wrap:wrap}
 .muted{color:var(--muted)} .small{font-size:13px} .mono{font-family:ui-monospace,Menlo,monospace}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}
 .grid.small{grid-template-columns:repeat(auto-fill,minmax(130px,1fr))}

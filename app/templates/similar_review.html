@@ -1,31 +1,26 @@
 {% extends "base.html" %}
 {% block title %}Pick keepers · Photo Curator{% endblock %}
 {% block content %}
-{% macro bar() %}
-<div class="revbar">
-  <button type="submit">Save these {{ groups | length }} choices</button>
-  <span class="small">{{ "{:,}".format(pend_n) }} photo{{ '' if pend_n == 1 else 's' }} ({{ pend_bytes | human }}) marked to discard so far
-    <span class="muted">· moves only when you run <code>scripts/quarantine.py --apply</code></span></span>
-  <span class="small progress-mini" title="{{ '{:,}'.format(done) }} of {{ '{:,}'.format(total) }} groups decided">
-    <b>{{ '%.1f' | format(pct) }}%</b> decided · {{ "{:,}".format(left) }} groups left</span>
-</div>
-{% endmacro %}
 <p><a href="/similar">&larr; Similar</a></p>
 <h1>Pick the keeper</h1>
-{% if msg %}<p class="notice">{{ msg }}</p>{% endif %}
+<p id="flash" class="notice" {% if not msg %}hidden{% endif %}>{{ msg }}</p>
 {% if not built %}
 <p class="muted">Nothing here yet. Run <span class="mono">scripts/find_similar.py</span> on the server first.</p>
 {% else %}
 <p class="muted">For each group, click the picture you want to keep. The others are marked to go to quarantine
 (restorable for 30 days; nothing is deleted). The suggestion is preselected: the biggest picture, then the one
 with a location, then a Live Photo, then the sharpest. If the vision check has run, fewer closed eyes come first. Choose <b>Keep all</b> if they are genuinely different
-photos, or <b>Decide later</b> to come back to a group. Nothing is recorded until you press Save.</p>
+photos, or <b>Decide later</b> to come back to a group.</p>
+<p class="muted">Click a picture to look closer, then work through the groups from there:
+<b>Next group</b> (N or Enter) accepts what is selected and moves on, and <b>K</b> keeps the photo you are looking at.
+A group is only recorded once you have been through it, and only when you press <b>Submit keepers</b>.
+More groups load as you go.</p>
 <p class="small muted">Quarantine now holds {{ q_bytes | human }} in {{ "{:,}".format(q_n) }} files.</p>
 <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ '%.1f' | format(pct) }}">
-  <div class="progress-fill" style="width: {{ '%.1f' | format(pct) }}%"></div>
+  <div class="progress-fill" id="pbar" style="width: {{ '%.1f' | format(pct) }}%"></div>
 </div>
-<p class="count"><b>{{ '%.1f' | format(pct) }}% done</b> · {{ "{:,}".format(done) }} of {{ "{:,}".format(total) }} groups decided,
-  <b>{{ "{:,}".format(left) }} left</b>
+<p class="count"><b><span class="js-pct">{{ '%.1f' | format(pct) }}</span>% done</b> · <span class="js-done">{{ "{:,}".format(done) }}</span> of <span class="js-total">{{ "{:,}".format(total) }}</span> groups decided,
+  <b><span class="js-left">{{ "{:,}".format(left) }}</span> left</b>
   <span class="muted">· {{ "{:,}".format(shown) }} in this list</span></p>
 <form class="filters" method="get" action="/similar/review">
   <select name="view" aria-label="Which groups" onchange="this.form.submit()">
@@ -43,109 +38,256 @@ photos, or <b>Decide later</b> to come back to a group. Nothing is recorded unti
     <option value="space" {% if f.order != 'group' %}selected{% endif %}>Most spare space first</option>
     <option value="group" {% if f.order == 'group' %}selected{% endif %}>Group number</option>
   </select>
-  <select name="per" aria-label="Groups per page" onchange="this.form.submit()">
-    {% for n in (5, 10, 25, 50) %}<option value="{{ n }}" {% if f.per == n %}selected{% endif %}>{{ n }} per page</option>{% endfor %}
-  </select>
 </form>
 
 {% if groups %}
-<form method="post" action="/similar/decide" id="rv">
-  <input type="hidden" name="back" value="{{ back }}">
-  <input type="hidden" name="view" value="{{ f.view }}">
-  <input type="hidden" name="start" value="{{ start }}">
-  {{ bar() }}
-  {% for g in groups %}
-  <section class="dupgroup rvgroup">
-    <input type="hidden" name="g" value="{{ g.id }}">
-    <h3>Group {{ g.id }}: {{ g.members | length }} photos
-      <span class="muted small">· {% if g.sources %}in {{ g.sources | join(' + ') }} · {% endif %}{{ g.span | span }}{% if g.decided %} · decided{% endif %}</span></h3>
-    <div class="cards">
-      {% for m in g.members %}
-      <div class="card" data-path="{{ m.path }}" data-id="{{ m.id }}" data-info="{% if m.faces is not none %}{{ m.faces }} faces, {{ m.eyes_closed }} eyes closed · {% endif %}{{ m.src_label }} · {% if m.width %}{{ m.width }}×{{ m.height }} · {% endif %}{{ m.size | human }}{% if m.sharp is not none %} · sharp {{ m.sharp | round | int }}{% endif %}">
-        <input type="hidden" name="m{{ g.id }}" value="{{ m.path }}">
-        <img class="thumbimg" loading="lazy" src="/thumb/{{ m.id }}" alt="{{ m.path }}" title="Click to look closer">
-        <label class="pick">
-          <span class="radio"><input type="radio" name="pick{{ g.id }}" value="{{ m.path }}" {% if g.chosen == m.path %}checked{% endif %}>
-            <b class="keeptxt">Keep</b><b class="droptxt">Discard</b></span>
-        </label>
-        <p class="small">
-          {% if m.path == g.suggested %}<span class="badge big sug">SUGGESTED</span>{% endif %}
-          {% if m.pair_key %}<span class="tag">LIVE</span>{% endif %}
-          {% if m.has_geo %}<span class="tag">📍 location</span>{% endif %}
-          {% if m.is_sharpest %}<span class="tag">sharpest</span>{% endif %}
-        </p>
-        {% if m.faces is not none %}<p class="small">👁 {{ m.faces }} face{{ '' if m.faces == 1 else 's' }}{% if m.faces %}
-          · <span class="{{ 'warn' if m.eyes_closed else '' }}">{{ m.eyes_closed }} eyes closed</span>{% if m.looking_away %} · {{ m.looking_away }} looking away{% endif %}{% endif %}{% if m.vnote %}<br><span class="muted">{{ m.vnote }}</span>{% endif %}</p>{% endif %}
-        <p class="small">{{ m.src_label }}<br>{% if m.width %}{{ m.width }}×{{ m.height }} · {% endif %}{{ m.size | human }}{% if m.sharp is not none %} · sharp {{ m.sharp | round | int }}{% endif %}<br>
-          {{ m.taken_at | day }} · <a href="/photo/{{ m.id }}" target="_blank" rel="noopener">open ↗</a></p>
-        <p class="small mono path">{{ m.path }}</p>
-      </div>
-      {% endfor %}
-    </div>
-    <p class="small">
-      <button type="button" class="lookbtn">Look closer (compare)</button> &nbsp;
-      {% if g.can_besttake %}<a href="/similar/besttake/{{ g.id }}" target="_blank" rel="noopener">Best Take: fix closed eyes &nearr;</a> &nbsp;{% endif %}
-      <label><input type="radio" name="pick{{ g.id }}" value="all" {% if g.chosen == 'all' %}checked{% endif %}> Keep all (different photos)</label>
-      &nbsp; <label><input type="radio" name="pick{{ g.id }}" value="later"> Decide later</label>
-    </p>
-  </section>
-  {% endfor %}
-  {{ bar() }}
-</form>
+<div class="revbar">
+  <button type="button" class="js-sub" disabled>Submit keepers (0)</button>
+  {% if f.view != 'decided' %}<button type="button" id="accept" class="quiet" title="Mark every group on this page that you have not touched as reviewed, using the preselected choice">Accept the suggestions shown</button>{% endif %}
+  <span class="small"><span class="js-pend">{{ "{:,}".format(pend_n) }}</span> photos (<span class="js-pendbytes">{{ pend_bytes | human }}</span>) marked to discard so far
+    <span class="muted">· moves only when you run <code>scripts/quarantine.py --apply</code></span></span>
+  <span class="small progress-mini"><b><span class="js-pct">{{ '%.1f' | format(pct) }}</span>%</b> decided · <span class="js-left">{{ "{:,}".format(left) }}</span> groups left</span>
+</div>
+<div id="groups" data-view="{{ f.view }}" data-kind="{{ f.kind }}" data-order="{{ f.order }}" data-shown="{{ shown }}">
+{% include "_review_groups.html" %}
+</div>
+<p class="pager" id="more"><span id="morestat" class="muted small"></span> <button type="button" id="morebtn" class="quiet">Load more groups</button></p>
+<div id="sentinel" style="height:1px"></div>
 {% else %}
-<p class="notice small">{{ "{:,}".format(pend_n) }} photo{{ '' if pend_n == 1 else 's' }} ({{ pend_bytes | human }}) marked to discard so far
+<p class="notice small"><span class="js-pend">{{ "{:,}".format(pend_n) }}</span> photos ({{ pend_bytes | human }}) marked to discard so far
   <span class="muted">· moves only when you run <code>scripts/quarantine.py --apply</code></span></p>
-<p class="empty">{% if f.view == 'decided' %}Nothing decided in this list yet.{% else %}No more groups to decide in this list.{% endif %}
-  {% if start > 0 %}<a href="/similar/review?{{ back.split('?', 1)[1] }}">Back to the start of the list</a>{% endif %}</p>
+<p class="empty">{% if f.view == 'decided' %}Nothing decided in this list yet.{% else %}No more groups to decide in this list.{% endif %}</p>
 {% endif %}
-<p class="pager">{% if prev_url %}<a href="{{ prev_url }}">&larr; Previous</a>{% endif %}
-  {% if next_url %}<a href="{{ next_url }}">Next &rarr;</a>{% endif %}</p>
+
 <div id="viewer" hidden>
   <div class="vtop"><span id="vcap"></span>
-    <span class="vbtns"><button type="button" id="vkeep">Keep this one (K)</button>
-      <button type="button" id="vfaces">Show faces (F)</button>
-      <button type="button" id="vprev">&larr;</button><button type="button" id="vnext">&rarr;</button>
-      <button type="button" id="vclose">Close (Esc)</button></span></div>
+    <span class="vbtns">
+      <button type="button" id="vprevg" title="P">&laquo; Group</button>
+      <button type="button" id="vnextg" title="N or Enter">Next group &raquo;</button>
+      <button type="button" id="vkeep" title="K">Keep this one</button>
+      <button type="button" id="vall" title="A">Keep all</button>
+      <button type="button" id="vlater" title="L">Decide later</button>
+      <button type="button" id="vfaces" title="F">Show faces</button>
+      <button type="button" id="vprev" title="Left arrow">&larr;</button><button type="button" id="vnext" title="Right arrow">&rarr;</button>
+      <button type="button" id="vsub" class="js-sub" title="S" disabled>Submit keepers (0)</button>
+      <button type="button" id="vclose" title="Esc">Close</button></span></div>
   <div id="vscroll"><img id="vimg" alt=""></div>
   <div id="vstrip"></div>
-  <p class="vhint">Click the picture to zoom to full detail and click again to fit. &larr; &rarr; switch photo · K keep this one · F outline the faces found (red = eyes closed) · Esc close.</p>
+  <p class="vhint">Click the picture to zoom to full detail and click again to fit. &larr; &rarr; switch photo ·
+    N / Enter next group · P previous group · K keep this one · A keep all · L decide later · F outline the faces (red = eyes closed) · S submit · Esc close<br>
+    <label><input type="checkbox" id="vauto" checked> K and A move straight on to the next group</label></p>
 </div>
 <script>
 (function () {
+  var wrap = document.getElementById('groups');
+  if (!wrap) return;
+  var view = wrap.dataset.view, kind = wrap.dataset.kind, order = wrap.dataset.order;
   var ov = document.getElementById('viewer'), img = document.getElementById('vimg'),
       sc = document.getElementById('vscroll'), strip = document.getElementById('vstrip'),
-      cap = document.getElementById('vcap'), cards = [], idx = 0, faces = false;
-  function radio(c) { return c.querySelector('input[type=radio]'); }
-  function status(c) { return c.classList.contains('drop') ? 'DISCARD' : (radio(c).checked ? 'KEEP' : ''); }
+      cap = document.getElementById('vcap'), auto = document.getElementById('vauto');
+  var cur = null, cards = [], idx = 0, faces = false, busy = false, ended = false, loading = null;
+  function $(id) { return document.getElementById(id); }
+  function all(sel, root) { return [].slice.call((root || document).querySelectorAll(sel)); }
+  function fmt(n) { return Number(n).toLocaleString('en-GB'); }
+  function radioOf(c) { return c.querySelector('input[type=radio]'); }
+  function groupPick(g) { var r = g.querySelector('input[type=radio]:checked'); return r ? r.value : ''; }
+  function sections() { return all('.rvgroup', wrap); }
+  try { if (localStorage.getItem('rvAuto') === '0') auto.checked = false; } catch (e) {}
+  auto.onchange = function () { try { localStorage.setItem('rvAuto', auto.checked ? '1' : '0'); } catch (e) {} };
+
+  // ---- state of each group ----
+  function refresh(g) {
+    var v = groupPick(g);
+    all('.card', g).forEach(function (c) {
+      c.classList.toggle('drop', v !== '' && v !== 'all' && v !== 'later' && c.dataset.path !== v); });
+    g.classList.toggle('later', v === 'later');
+  }
+  function tag(g) {
+    var s = g.querySelector('.rvstate');
+    s.textContent = g.classList.contains('stale') ? ' · changed since this page loaded: reload to see it'
+      : g.classList.contains('saved') ? ' · ✓ saved'
+      : g.classList.contains('reviewed') ? ' · ✓ ready to submit' : '';
+  }
+  function ready() { return all('.rvgroup.reviewed:not(.saved)', wrap); }
+  function counts() {
+    var n = ready().length;
+    all('.js-sub').forEach(function (b) { b.disabled = busy || n === 0; b.textContent = 'Submit keepers (' + n + ')'; });
+    window.onbeforeunload = n ? function (e) { e.preventDefault(); e.returnValue = ''; return ''; } : null;
+  }
+  function review(g, on) {
+    if (on) g.classList.remove('saved', 'stale');
+    g.classList.toggle('reviewed', on); tag(g); counts();
+  }
+  function seen(g) {                         // you have been through this group: take what is selected
+    var p = groupPick(g);
+    if (view === 'decided' || g.classList.contains('saved') || !p || p === 'later') return;
+    review(g, true);
+  }
+  wrap.addEventListener('change', function (e) {
+    var g = e.target.closest('.rvgroup'); if (!g) return;
+    refresh(g);
+    var p = groupPick(g);
+    // "Decide later" only needs sending when it undoes something already decided
+    review(g, p !== 'later' || view === 'decided' || g.classList.contains('saved'));
+  });
+  wrap.addEventListener('click', function (e) {
+    var h = e.target.closest('h3'), g = h && h.closest('.rvgroup');
+    if (g && g.classList.contains('saved')) g.classList.toggle('expand');
+  });
+  function prep(g) { refresh(g); tag(g); }
+  sections().forEach(prep);
+
+  // ---- messages and totals ----
+  function flash(t) { var f = $('flash'); f.textContent = t; f.hidden = !t; }
+  function totals(d) {
+    function set(c, v) { all('.' + c).forEach(function (e) { e.textContent = v; }); }
+    set('js-pct', d.pct.toFixed(1)); set('js-done', fmt(d.done)); set('js-total', fmt(d.total)); set('js-left', fmt(d.left));
+    set('js-pend', fmt(d.pend_n)); set('js-pendbytes', d.pend_bytes_h);
+    $('pbar').style.width = d.pct + '%';
+  }
+
+  // ---- more groups, loaded as you go ----
+  function moreStat() {
+    $('morebtn').hidden = ended;
+    $('morestat').textContent = ended ? 'End of the list.' : '';
+  }
+  function inList() { return all('.rvgroup[data-inlist="1"]', wrap).length; }
+  function loadMore() {
+    if (ended) return Promise.resolve(0);
+    if (loading) return loading;
+    $('morestat').textContent = 'Loading…';
+    var q = new URLSearchParams({kind: kind, view: view, order: order, start: inList()});
+    loading = fetch('/similar/review/chunk?' + q, {headers: {'X-Requested-With': 'fetch'}})
+      .then(function (r) { if (!r.ok) throw new Error('server said ' + r.status); return r.json(); })
+      .then(function (d) {
+        var box = document.createElement('div'), added = 0;
+        box.innerHTML = d.html;
+        all('.rvgroup', box).forEach(function (s) {
+          if (wrap.querySelector('.rvgroup[data-gid="' + s.dataset.gid + '"]')) return;
+          wrap.appendChild(s); prep(s); added++;
+        });
+        if (d.n < d.chunk || (d.n > 0 && added === 0)) ended = true;
+        moreStat();
+        return added;
+      })
+      .catch(function (e) { $('morestat').textContent = 'Could not load more (' + e.message + ').'; return 0; })
+      .then(function (n) { loading = null; return n; });
+    return loading;
+  }
+  ended = sections().length >= Number(wrap.dataset.shown);
+  moreStat();
+  $('morebtn').onclick = loadMore;
+  function nearEnd() { return $('sentinel').getBoundingClientRect().top < window.innerHeight + 1500; }
+  function keepFilled() { if (!ended && nearEnd()) loadMore().then(function (n) { if (n) setTimeout(keepFilled, 50); }); }
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(function (es) { if (es[0].isIntersecting) keepFilled(); }, {rootMargin: '1500px'}).observe($('sentinel'));
+  }
+
+  // ---- submit ----
+  function submit() {
+    var gs = ready();
+    if (busy || !gs.length) return;
+    var body = new URLSearchParams();
+    body.set('view', view);
+    gs.forEach(function (g) {
+      var id = g.dataset.gid;
+      body.append('g', id);
+      all('.card', g).forEach(function (c) { body.append('m' + id, c.dataset.path); });
+      body.set('pick' + id, groupPick(g) || 'later');
+    });
+    busy = true; counts(); flash('Saving ' + gs.length + ' group' + (gs.length === 1 ? '' : 's') + '…');
+    fetch('/similar/decide', {method: 'POST', body: body.toString(),
+        headers: {'X-Requested-With': 'fetch', 'Content-Type': 'application/x-www-form-urlencoded'}})
+      .then(function (r) { if (!r.ok) throw new Error('server said ' + r.status); return r.json(); })
+      .then(function (d) {
+        gs.forEach(function (g) {
+          var res = d.results[g.dataset.gid];
+          g.classList.remove('reviewed');
+          g.dataset.inlist = d.listed[g.dataset.gid] ? '1' : '0';
+          if (res === 'saved') g.classList.add('saved');
+          else if (res === 'skipped') g.classList.add('stale');
+          tag(g);
+        });
+        totals(d); flash(d.text);
+        busy = false; counts(); if (!ov.hidden) show();
+        keepFilled();
+      })
+      .catch(function (e) { busy = false; counts(); flash('Could not save (' + e.message + '). Your choices are still on the page; try Submit again.'); });
+  }
+  if ($('accept')) $('accept').onclick = function () {
+    var n = 0;
+    sections().forEach(function (g) {
+      if (!g.classList.contains('reviewed') && !g.classList.contains('saved') && groupPick(g) && groupPick(g) !== 'later') { review(g, true); n++; }
+    });
+    flash(n ? 'Marked ' + n + ' group' + (n === 1 ? '' : 's') + ' as reviewed with the choice shown. Press Submit keepers to save.' : 'Nothing to accept on this page.');
+  };
+  all('.js-sub').forEach(function (b) { b.onclick = submit; });
+  counts();
+
+  // ---- the viewer: one group after another without closing ----
+  function status() {
+    var p = groupPick(cur);
+    if (p === 'all') return 'KEEP ALL';
+    if (p === 'later') return 'DECIDE LATER';
+    return cards[idx].classList.contains('drop') ? 'DISCARD' : 'KEEP';
+  }
   function show() {
-    var c = cards[idx];
+    var c = cards[idx], secs = sections();
     img.className = ''; img.src = (faces ? '/annotated/' : '/preview/') + c.dataset.id;
-    cap.textContent = (idx + 1) + ' of ' + cards.length + ' · ' + c.dataset.info + ' · ' + status(c);
-    document.getElementById('vkeep').disabled = radio(c).checked;
+    cap.textContent = 'Group ' + cur.dataset.gid + ' (' + (secs.indexOf(cur) + 1) + ' of ' + secs.length + (ended ? '' : '+') + ') · photo '
+      + (idx + 1) + '/' + cards.length + ' · ' + c.dataset.info + ' · ' + status()
+      + (cur.classList.contains('saved') ? ' · saved' : cur.classList.contains('reviewed') ? ' · ✓ ready' : '');
     [].forEach.call(strip.children, function (t, i) { t.classList.toggle('cur', i === idx);
       t.classList.toggle('dropped', cards[i].classList.contains('drop')); });
     [idx - 1, idx + 1].forEach(function (i) { if (cards[i]) (new Image()).src = (faces ? '/annotated/' : '/preview/') + cards[i].dataset.id; });
     sc.scrollTop = sc.scrollLeft = 0;
+    $('vprevg').disabled = !cur.previousElementSibling;
   }
-  function open(card) {
-    cards = [].slice.call(card.closest('.rvgroup').querySelectorAll('.card'));
-    idx = cards.indexOf(card);
+  function openGroup(g, which) {
+    cur = g; cards = all('.card', g);
+    if (typeof which !== 'number') {
+      which = 0;
+      cards.forEach(function (c, i) { if (radioOf(c).checked) which = i; });
+    }
+    idx = which;
     strip.innerHTML = '';
     cards.forEach(function (c, i) {
       var t = document.createElement('img'); t.src = '/thumb/' + c.dataset.id;
       t.onclick = function () { idx = i; show(); }; strip.appendChild(t);
     });
     ov.hidden = false; document.body.style.overflow = 'hidden'; show();
+    var after = 0, n = g.nextElementSibling;
+    while (n && after < 6) { after++; n = n.nextElementSibling; }
+    if (!ended && after < 6) loadMore();          // get the next lot ready before you reach the end
   }
-  function close() { ov.hidden = true; document.body.style.overflow = ''; img.removeAttribute('src'); }
+  function close() {
+    ov.hidden = true; document.body.style.overflow = ''; img.removeAttribute('src');
+    if (cur) cur.scrollIntoView({block: 'center'});
+  }
   function step(d) { idx = (idx + d + cards.length) % cards.length; show(); }
-  function keep() {
-    var r = radio(cards[idx]); r.checked = true; r.dispatchEvent(new Event('change', {bubbles: true})); show();
+  function lastWord() { show(); cap.textContent = 'That was the last group in this list. Press Submit keepers (S) to save.'; }
+  function nextGroup() {
+    if (!cur) return;
+    seen(cur);
+    var n = cur.nextElementSibling;
+    if (n) { openGroup(n); return; }
+    if (ended) { lastWord(); return; }
+    cap.textContent = 'Loading more groups…';
+    var from = cur;
+    loadMore().then(function () { if (cur === from) { var m = from.nextElementSibling; if (m) openGroup(m); else lastWord(); } });
   }
+  function prevGroup() { var p = cur && cur.previousElementSibling; if (p) openGroup(p); }
+  function choose(el) { el.checked = true; el.dispatchEvent(new Event('change', {bubbles: true})); }
+  function afterChoice() { if (auto.checked) nextGroup(); else show(); }
+  function keepThis() { choose(radioOf(cards[idx])); afterChoice(); }
+  function keepAll() { choose(cur.querySelector('input[value="all"]')); afterChoice(); }
+  function later() { choose(cur.querySelector('input[value="later"]')); nextGroup(); }
   document.addEventListener('click', function (e) {
     var t = e.target.closest('.thumbimg, .lookbtn');
     if (!t) return;
-    open(t.classList.contains('lookbtn') ? t.closest('.rvgroup').querySelector('.card') : t.closest('.card'));
+    var g = t.closest('.rvgroup');
+    if (t.classList.contains('lookbtn')) openGroup(g, 0);
+    else openGroup(g, all('.card', g).indexOf(t.closest('.card')));
   });
   img.addEventListener('click', function (e) {
     var zoomed = img.classList.toggle('zoom');
@@ -153,35 +295,33 @@ photos, or <b>Decide later</b> to come back to a group. Nothing is recorded unti
       sc.scrollLeft = (e.clientX - r.left) / r.width * img.scrollWidth - sc.clientWidth / 2;
       sc.scrollTop = (e.clientY - r.top) / r.height * img.scrollHeight - sc.clientHeight / 2; }
   });
-  function toggleFaces() { faces = !faces; document.getElementById('vfaces').textContent = faces ? 'Hide faces (F)' : 'Show faces (F)'; show(); }
-  document.getElementById('vfaces').onclick = toggleFaces;
-  document.getElementById('vkeep').onclick = keep;
-  document.getElementById('vprev').onclick = function () { step(-1); };
-  document.getElementById('vnext').onclick = function () { step(1); };
-  document.getElementById('vclose').onclick = close;
+  function toggleFaces() { faces = !faces; $('vfaces').textContent = faces ? 'Hide faces' : 'Show faces'; show(); }
+  $('vfaces').onclick = toggleFaces;
+  $('vkeep').onclick = keepThis;
+  $('vall').onclick = keepAll;
+  $('vlater').onclick = later;
+  $('vnextg').onclick = nextGroup;
+  $('vprevg').onclick = prevGroup;
+  $('vprev').onclick = function () { step(-1); };
+  $('vnext').onclick = function () { step(1); };
+  $('vclose').onclick = close;
   document.addEventListener('keydown', function (e) {
-    if (ov.hidden) return;
-    if (e.key === 'Escape') close();
-    else if (e.key === 'ArrowLeft') step(-1);
-    else if (e.key === 'ArrowRight') step(1);
-    else if (e.key === 'k' || e.key === 'K') keep();
-    else if (e.key === 'f' || e.key === 'F') toggleFaces();
+    if (ov.hidden || e.ctrlKey || e.metaKey || e.altKey) return;
+    var k = e.key;
+    if (k === 'Escape') close();
+    else if (k === 'ArrowLeft') step(-1);
+    else if (k === 'ArrowRight') step(1);
+    else if (k === 'n' || k === 'N' || k === 'Enter') nextGroup();
+    else if (k === 'p' || k === 'P') prevGroup();
+    else if (k === 'k' || k === 'K') keepThis();
+    else if (k === 'a' || k === 'A') keepAll();
+    else if (k === 'l' || k === 'L') later();
+    else if (k === 'f' || k === 'F') toggleFaces();
+    else if (k === 's' || k === 'S') submit();
     else return;
     e.preventDefault();
   });
 })();
-</script>
-<script>
-document.querySelectorAll('.rvgroup').forEach(function (g) {
-  function upd() {
-    var r = g.querySelector('input[type=radio]:checked'), v = r ? r.value : '';
-    g.querySelectorAll('.card').forEach(function (c) {
-      c.classList.toggle('drop', v !== '' && v !== 'all' && v !== 'later' && c.dataset.path !== v);
-    });
-    g.classList.toggle('later', v === 'later');
-  }
-  g.addEventListener('change', upd); upd();
-});
 </script>
 {% endif %}
 {% endblock %}

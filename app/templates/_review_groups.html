@@ -1,0 +1,35 @@
+{% for g in groups %}
+<section class="dupgroup rvgroup" data-gid="{{ g.id }}" data-inlist="1">
+  <h3>Group {{ g.id }}: {{ g.members | length }} photos
+    <span class="muted small">· {% if g.sources %}in {{ g.sources | join(' + ') }} · {% endif %}{{ g.span | span }}{% if g.decided %} · decided{% endif %}</span>
+    <span class="rvstate small"></span></h3>
+  <div class="cards">
+    {% for m in g.members %}
+    <div class="card" data-path="{{ m.path }}" data-id="{{ m.id }}" data-info="{% if m.faces is not none %}{{ m.faces }} faces, {{ m.eyes_closed }} eyes closed · {% endif %}{{ m.src_label }} · {% if m.width %}{{ m.width }}×{{ m.height }} · {% endif %}{{ m.size | human }}{% if m.sharp is not none %} · sharp {{ m.sharp | round | int }}{% endif %}">
+      <img class="thumbimg" loading="lazy" src="/thumb/{{ m.id }}" alt="{{ m.path }}" title="Click to look closer">
+      <label class="pick">
+        <span class="radio"><input type="radio" name="pick{{ g.id }}" value="{{ m.path }}" {% if g.chosen == m.path %}checked{% endif %}>
+          <b class="keeptxt">Keep</b><b class="droptxt">Discard</b></span>
+      </label>
+      <p class="small">
+        {% if m.path == g.suggested %}<span class="badge big sug">SUGGESTED</span>{% endif %}
+        {% if m.pair_key %}<span class="tag">LIVE</span>{% endif %}
+        {% if m.has_geo %}<span class="tag">📍 location</span>{% endif %}
+        {% if m.is_sharpest %}<span class="tag">sharpest</span>{% endif %}
+      </p>
+      {% if m.faces is not none %}<p class="small">👁 {{ m.faces }} face{{ '' if m.faces == 1 else 's' }}{% if m.faces %}
+        · <span class="{{ 'warn' if m.eyes_closed else '' }}">{{ m.eyes_closed }} eyes closed</span>{% if m.looking_away %} · {{ m.looking_away }} looking away{% endif %}{% endif %}{% if m.vnote %}<br><span class="muted">{{ m.vnote }}</span>{% endif %}</p>{% endif %}
+      <p class="small">{{ m.src_label }}<br>{% if m.width %}{{ m.width }}×{{ m.height }} · {% endif %}{{ m.size | human }}{% if m.sharp is not none %} · sharp {{ m.sharp | round | int }}{% endif %}<br>
+        {{ m.taken_at | day }} · <a href="/photo/{{ m.id }}" target="_blank" rel="noopener">open ↗</a></p>
+      <p class="small mono path">{{ m.path }}</p>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="small rvctl">
+    <button type="button" class="lookbtn">Look closer (compare)</button> &nbsp;
+    {% if g.can_besttake %}<a href="/similar/besttake/{{ g.id }}" target="_blank" rel="noopener">Best Take: fix closed eyes &nearr;</a> &nbsp;{% endif %}
+    <label><input type="radio" name="pick{{ g.id }}" value="all" {% if g.chosen == 'all' %}checked{% endif %}> Keep all (different photos)</label>
+    &nbsp; <label><input type="radio" name="pick{{ g.id }}" value="later"> Decide later</label>
+  </p>
+</section>
+{% endfor %}

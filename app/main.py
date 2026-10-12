@@ -17,7 +17,7 @@ from urllib.parse import parse_qs, urlencode, urlparse
 import posixpath
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -652,8 +652,10 @@ def similar_page(request: Request, db=Depends(get_db), page: int = 1, kind: str 
 # ---- near-duplicate Review: pick the one to keep, the rest go to quarantine ----
 # The page only RECORDS picks (table sim_mark in the edits file).  scripts/quarantine.py --apply
 # is what moves files, and it re-checks everything first.
+# The list loads in chunks as you go (no pages); you press "Submit keepers" when you want the
+# picks recorded, and only groups you have reviewed are sent.
 
-REVIEW_PER = (5, 10, 25, 50)
+REVIEW_CHUNK = 25
 
 
 def review_filters(kind, view):
@@ -680,12 +682,18 @@ def suggest_keeper(members):
                                        m["size"]))["path"]
 
 
-@app.get("/similar/review", response_class=HTMLResponse)
-def similar_review(request: Request, db=Depends(get_db), kind: str = "", view: str = "pending",
-                   order: str = "space", start: int = 0, per: int = 10, msg: str = ""):
-    per = per if per in REVIEW_PER else 10
-    start = max(start, 0)
-    built = db.execute("SELECT v FROM sim.sim_meta WHERE k = 'built_at'").fetchone()
+def review_totals(db):
+    pend = db.execute("SELECT COUNT(*), COALESCE(SUM(f.size), 0) FROM ed.sim_mark m JOIN main.files f "
+                      "ON f.path = m.path WHERE m.mark = 'discard' AND m.used_batch IS NULL").fetchone()
+    total = db.execute("SELECT COUNT(DISTINCT group_id) FROM sim.sim_group").fetchone()[0]
+    done = db.execute("SELECT COUNT(*) FROM (SELECT g.group_id FROM sim.sim_group g LEFT JOIN ed.sim_mark m "
+                      "ON m.path = g.path GROUP BY g.group_id HAVING SUM(m.path IS NULL) = 0)").fetchone()[0]
+    return {"pend_n": pend[0], "pend_bytes": pend[1], "pend_bytes_h": human(pend[1]), "total": total,
+            "done": done, "left": max(total - done, 0), "pct": round(done * 100.0 / total, 1) if total else 0.0}
+
+
+def review_page(db, kind, view, order, start, n):
+    """The groups for one chunk of the list, and how many groups the whole list holds."""
     where, having = review_filters(kind, view)
     base = (f"FROM sim.sim_group g JOIN {FILES} f ON f.path = g.path "
             f"LEFT JOIN sim.sim_info i ON i.group_id = g.group_id "
@@ -693,7 +701,7 @@ def similar_review(request: Request, db=Depends(get_db), kind: str = "", view: s
     shown = db.execute(f"SELECT COUNT(*) FROM (SELECT g.group_id {base})").fetchone()[0]
     sort = ("g.group_id" if order == "group"
             else "SUM(f.size) - SUM(CASE WHEN g.is_best = 1 THEN f.size ELSE 0 END) DESC, g.group_id")
-    gids = [r[0] for r in db.execute(f"SELECT g.group_id {base} ORDER BY {sort} LIMIT ? OFFSET ?", (per, start))]
+    gids = [r[0] for r in db.execute(f"SELECT g.group_id {base} ORDER BY {sort} LIMIT ? OFFSET ?", (n, start))]
     geo = "mf.lat IS NOT NULL" if geo_ready(db) else "0"
     groups = []
     for gid in gids:
@@ -725,22 +733,35 @@ def similar_review(request: Request, db=Depends(get_db), kind: str = "", view: s
                        "decided": all(m["mark"] for m in members),
                        "span": info["span_s"] if info else None,
                        "sources": labels if len(labels) > 1 else []})
-    pend = db.execute("SELECT COUNT(*), COALESCE(SUM(f.size), 0) FROM ed.sim_mark m JOIN main.files f "
-                      "ON f.path = m.path WHERE m.mark = 'discard' AND m.used_batch IS NULL").fetchone()
-    total = db.execute("SELECT COUNT(DISTINCT group_id) FROM sim.sim_group").fetchone()[0]
-    done = db.execute("SELECT COUNT(*) FROM (SELECT g.group_id FROM sim.sim_group g LEFT JOIN ed.sim_mark m "
-                      "ON m.path = g.path GROUP BY g.group_id HAVING SUM(m.path IS NULL) = 0)").fetchone()[0]
-    f = {"kind": kind, "view": view, "order": order, "per": per}
-    q = urlencode({k: v for k, v in f.items() if v})
-    nxt = start + len(gids)
+    return groups, shown
+
+
+def review_args(kind, view, order):
+    return (kind if kind in ("cross", "burst", "spread", "unknown") else "",
+            "decided" if view == "decided" else "pending",
+            "group" if order == "group" else "space")
+
+
+@app.get("/similar/review", response_class=HTMLResponse)
+def similar_review(request: Request, db=Depends(get_db), kind: str = "", view: str = "pending",
+                   order: str = "space", msg: str = ""):
+    kind, view, order = review_args(kind, view, order)
+    built = db.execute("SELECT v FROM sim.sim_meta WHERE k = 'built_at'").fetchone()
+    groups, shown = review_page(db, kind, view, order, 0, REVIEW_CHUNK)
     return templates.TemplateResponse(request, "similar_review.html", {
         "q_n": quarantine_held(db)[0], "q_bytes": quarantine_held(db)[1],
-        "groups": groups, "f": f, "built": built[0] if built else None, "shown": shown, "start": start,
-        "pend_n": pend[0], "pend_bytes": pend[1], "total": total, "done": done, "msg": msg,
-        "left": max(total - done, 0), "pct": (done * 100.0 / total) if total else 0.0,
-        "back": "/similar/review?" + q,
-        "next_url": f"/similar/review?{q}&start={nxt}" if nxt < shown else None,
-        "prev_url": f"/similar/review?{q}&start={max(start - per, 0)}" if start > 0 else None})
+        "groups": groups, "f": {"kind": kind, "view": view, "order": order}, "built": built[0] if built else None,
+        "shown": shown, "chunk": REVIEW_CHUNK, "msg": msg, **review_totals(db)})
+
+
+@app.get("/similar/review/chunk")
+def similar_review_chunk(db=Depends(get_db), kind: str = "", view: str = "pending", order: str = "space",
+                         start: int = 0):
+    """The next slice of the list as ready-made HTML, for the page to append."""
+    kind, view, order = review_args(kind, view, order)
+    groups, shown = review_page(db, kind, view, order, max(start, 0), REVIEW_CHUNK)
+    html = templates.get_template("_review_groups.html").render(groups=groups)
+    return JSONResponse({"html": html, "n": len(groups), "chunk": REVIEW_CHUNK, "shown": shown})
 
 
 @app.post("/similar/decide")
@@ -749,11 +770,13 @@ async def similar_decide(request: Request, db=Depends(get_db)):
         raise HTTPException(403, "Cross-site request refused")
     qs = parse_qs((await request.body()).decode("utf-8", "replace"), keep_blank_values=True)
     one = lambda k, d="": qs.get(k, [d])[0]
+    ajax = request.headers.get("x-requested-with") == "fetch"
     view = one("view", "pending")
     start = int(one("start", "0")) if one("start", "0").isdigit() else 0
     now = datetime.now().isoformat(timespec="seconds")
     marks, clears = [], []
     stays = skipped = groups_saved = 0
+    results, listed = {}, {}                          # per group, for the page: what happened / still in this list?
     for gid in qs.get("g", []):
         paths = list(dict.fromkeys(qs.get(f"m{gid}", [])))
         pick = one(f"pick{gid}", "later")
@@ -772,21 +795,26 @@ async def similar_decide(request: Request, db=Depends(get_db)):
         if not ok:                                   # page is out of date: leave this group alone
             skipped += 1
             stays += 1
+            results[gid], listed[gid] = "skipped", True
             continue
         if pick == "later":
             clears.extend(paths)
             stays += view != "decided"
+            results[gid], listed[gid] = "later", view != "decided"
         elif pick == "all":
             marks.extend((p, "keep", None, now) for p in paths)
             groups_saved += 1
             stays += view == "decided"
+            results[gid], listed[gid] = "saved", view == "decided"
         elif pick in paths:
             marks.extend((p, "keep" if p == pick else "discard", None if p == pick else pick, now) for p in paths)
             groups_saved += 1
             stays += view == "decided"
+            results[gid], listed[gid] = "saved", view == "decided"
         else:
             skipped += 1
             stays += 1
+            results[gid], listed[gid] = "skipped", True
     con = sqlite3.connect(EDITS)
     try:
         con.executemany("DELETE FROM sim_mark WHERE path = ? AND used_batch IS NULL", [(p,) for p in clears])
@@ -794,13 +822,16 @@ async def similar_decide(request: Request, db=Depends(get_db)):
         con.commit()
     finally:
         con.close()
-    back = one("back", "/similar/review")
-    if not back.startswith("/similar/review") or "//" in back or "\n" in back:
-        back = "/similar/review"
     discards = sum(1 for m in marks if m[1] == "discard")
     text = f"Saved {groups_saved} group{'' if groups_saved == 1 else 's'} ({discards} photo{'' if discards == 1 else 's'} marked to discard)."
     if skipped:
         text += f" {skipped} group{'' if skipped == 1 else 's'} changed since the page loaded and were left alone."
+    if ajax:
+        return JSONResponse({"text": text, "saved": groups_saved, "discards": discards, "skipped": skipped,
+                             "results": results, "listed": listed, **review_totals(db)})
+    back = one("back", "/similar/review")
+    if not back.startswith("/similar/review") or "//" in back or "\n" in back:
+        back = "/similar/review"
     sep = "&" if "?" in back else "?"
     return RedirectResponse(f"{back}{sep}" + urlencode({"start": start + stays, "msg": text}), status_code=303)
 
