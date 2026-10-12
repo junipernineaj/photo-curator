@@ -625,11 +625,14 @@ listed as UNACCOUNTED and the verdict is NOT READY.
 5. It cannot see the offsite drive, anything added to the cloud since the Takeout / the Mac's download, or devices that could
    re-upload: tick those yourself before deleting. Google's bin keeps deleted items 60 days; Apple's Recently Deleted about 30.
 
-#### Eye check, 12 Oct fix: faces now come from a detector
-Tony spot-checked 12 random "one face, eyes closed" photos: only 1 was a face, the rest were scenery. Asked to find every head, the
-vision model invents faces in scenery and calls about half of all faces "closed". Faces are now found by a small CPU detector
-(`app/facefind.py`, YuNet, model in `app/models/`), and Qwen is only asked open/closed on those crops (`/faces-v5`).
-Repair what was already done without rerunning the model: stop the job, `git pull`, then `scripts/vision_check.py --revalidate`
-(a few minutes). It keeps only faces the detector also sees and marks the model's verdict `unclear` where its box was not a crop
-of that one face. Then re-run `scripts/vision_check.py` to judge the faces that are still `unclear` (only real faces now: much
-quicker than before). Check the rate again with the by-face-count query; a believable blink rate is well under 15% for one face.
+#### Eye check, 12 Oct rewrite (method `/faces-v6`)
+Tony's spot-checks showed the first method was wrong in several ways: the vision model invented faces in scenery (11 of 12
+single-face flags were not faces), the face detector sometimes saw a face in a plate of food, and "closed" was said of people
+who were simply looking away. The method now is:
+1. A small CPU face detector (`app/facefind.py`, YuNet, model in `app/models/`) finds faces and five landmarks each.
+2. A head turned well away (`AWAY_YAW`) is marked "looking away" and not judged; faces with eyes closer than `MIN_EYE_PX`
+   in the 1600px preview are "unclear".
+3. For the rest a level close-up strip of just the two eyes is cut out and Qwen answers OPEN / CLOSED / UNCLEAR.
+Old results (other tags) are redone by the normal run: `git pull`, then `scripts/vision_check.py --limit 40` to see it, then the full
+run in the background. Judge it with `scripts/eye_sheet.py --state closed` (and `open`, `away`): a contact sheet at
+`/derived/eye-sheet.html` showing the face and the strip the model saw. Count how many are really right before trusting the flags.

@@ -400,3 +400,8 @@ too, Recently Deleted left for a while before emptying. Not run on the real data
 93% at six faces: about half of all faces called closed). Tony checked 12 of the single-face flags: 11 were scenery. Cause: the
 model invents heads when asked to find them. Fix: YuNet face detector decides where faces are, Qwen only judges eyes; `--revalidate`
 repairs the old results; model tag `/faces-v5`. Review suggestion and Best Take should not be trusted on old results until revalidated.
+
+08:40, 12 Oct: repairing the old results with the face detector left 15,499 of 16,756 faces unjudged, and four more spot-checks showed
+the remaining problems: a face "found" in a plate of food, a painting, two people turned away called closed, and false closed in a
+12-face group. Rewrote the method (`/faces-v6`): detector landmarks, turned heads skipped, eyes judged from a level close-up strip of
+the two eyes; removed `--revalidate` and the model-finds-faces path; added `scripts/eye_sheet.py` (contact sheet to check results by eye).
