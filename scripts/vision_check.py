@@ -182,7 +182,7 @@ def main():
     edits = os.environ.get("EDITS", os.path.join(parent, "curator_edits.sqlite"))
     thumbs_dir = os.environ.get("THUMBS", os.path.join(parent, "thumbs"))
     similar.init_sim(simp)
-    con = sqlite3.connect(simp)
+    con = sqlite3.connect(simp, timeout=120)      # wait rather than fail if another program is writing
     main_db = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
 
     marked = set()
