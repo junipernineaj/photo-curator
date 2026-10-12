@@ -21,6 +21,9 @@ main{padding:16px;max-width:1500px;margin:0 auto}
 .filters input[type=search]{min-width:220px;flex:1 1 220px}
 .check{display:flex;gap:6px;align-items:center;color:var(--muted)}
 .count{margin:6px 0 12px}
+.progress{height:10px;background:var(--cell);border:1px solid var(--line);border-radius:6px;overflow:hidden;margin:8px 0 0}
+.progress-fill{height:100%;background:var(--accent);min-width:2px}
+.progress-mini{margin-left:auto;white-space:nowrap}
 .muted{color:var(--muted)} .small{font-size:13px} .mono{font-family:ui-monospace,Menlo,monospace}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}
 .grid.small{grid-template-columns:repeat(auto-fill,minmax(130px,1fr))}

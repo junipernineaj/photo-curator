@@ -737,6 +737,7 @@ def similar_review(request: Request, db=Depends(get_db), kind: str = "", view: s
         "q_n": quarantine_held(db)[0], "q_bytes": quarantine_held(db)[1],
         "groups": groups, "f": f, "built": built[0] if built else None, "shown": shown, "start": start,
         "pend_n": pend[0], "pend_bytes": pend[1], "total": total, "done": done, "msg": msg,
+        "left": max(total - done, 0), "pct": (done * 100.0 / total) if total else 0.0,
         "back": "/similar/review?" + q,
         "next_url": f"/similar/review?{q}&start={nxt}" if nxt < shown else None,
         "prev_url": f"/similar/review?{q}&start={max(start - per, 0)}" if start > 0 else None})

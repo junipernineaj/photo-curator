@@ -6,6 +6,8 @@
   <button type="submit">Save these {{ groups | length }} choices</button>
   <span class="small">{{ "{:,}".format(pend_n) }} photo{{ '' if pend_n == 1 else 's' }} ({{ pend_bytes | human }}) marked to discard so far
     <span class="muted">· moves only when you run <code>scripts/quarantine.py --apply</code></span></span>
+  <span class="small progress-mini" title="{{ '{:,}'.format(done) }} of {{ '{:,}'.format(total) }} groups decided">
+    <b>{{ '%.1f' | format(pct) }}%</b> decided · {{ "{:,}".format(left) }} groups left</span>
 </div>
 {% endmacro %}
 <p><a href="/similar">&larr; Similar</a></p>
@@ -19,7 +21,11 @@
 with a location, then a Live Photo, then the sharpest. If the vision check has run, fewer closed eyes come first. Choose <b>Keep all</b> if they are genuinely different
 photos, or <b>Decide later</b> to come back to a group. Nothing is recorded until you press Save.</p>
 <p class="small muted">Quarantine now holds {{ q_bytes | human }} in {{ "{:,}".format(q_n) }} files.</p>
-<p class="count">{{ "{:,}".format(done) }} of {{ "{:,}".format(total) }} groups decided
+<div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ '%.1f' | format(pct) }}">
+  <div class="progress-fill" style="width: {{ '%.1f' | format(pct) }}%"></div>
+</div>
+<p class="count"><b>{{ '%.1f' | format(pct) }}% done</b> · {{ "{:,}".format(done) }} of {{ "{:,}".format(total) }} groups decided,
+  <b>{{ "{:,}".format(left) }} left</b>
   <span class="muted">· {{ "{:,}".format(shown) }} in this list</span></p>
 <form class="filters" method="get" action="/similar/review">
   <select name="view" aria-label="Which groups" onchange="this.form.submit()">

@@ -414,3 +414,6 @@ two missing Shared Library photos, backup, offsite). Google: Takeout started 9 O
 VERDICT READY. Tony removed the Google Photos app from the iPhone. Still to do: backup.sh --apply, look in Google's bin for anything
 after 7 Oct, check other devices / Drive for desktop are not uploading, refresh offsite before the bin expires (~10 Dec).
 New habit needed: with Google backup gone, new iPhone photos exist only on the phone and iCloud until the weekly pull is built.
+
+10:50, 12 Oct: Review page ("Pick the keeper") now shows progress: a bar plus "NN.N% done, X of Y groups decided, Z left" under the heading, and a
+short "NN.N% decided - Z groups left" in the sticky bar that follows you down the page. A group counts as decided once every photo in it has a mark.
