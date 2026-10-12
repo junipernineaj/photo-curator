@@ -35,7 +35,8 @@ More groups load as you go.</p>
     <option value="unknown" {% if f.kind == 'unknown' %}selected{% endif %}>Camera time unknown</option>
   </select>
   <select name="order" aria-label="Order" onchange="this.form.submit()">
-    <option value="space" {% if f.order != 'group' %}selected{% endif %}>Most spare space first</option>
+    <option value="count" {% if f.order == 'count' %}selected{% endif %}>Most photos in the group first</option>
+    <option value="space" {% if f.order == 'space' %}selected{% endif %}>Most spare space first</option>
     <option value="group" {% if f.order == 'group' %}selected{% endif %}>Group number</option>
   </select>
 </form>

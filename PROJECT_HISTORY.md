@@ -424,3 +424,6 @@ you scroll or move through them (no pages). In the close-up viewer, "Next group"
 between groups. A group is only recorded after you have been through it (or changed it, or used "Accept the suggestions shown"), and only when you
 press "Submit keepers", which saves in the background without reloading; saved groups fold up to one line. Progress bar and counts update on submit.
 Tested in headless Chromium against a 60-group fake archive. The old Save button/pager and the "per page" menu are gone.
+
+11:50, 12 Oct: Review list order: new default "Most photos in the group first" (then most spare space, then group number), so big groups go first and progress
+moves faster. "Most spare space first" and "Group number" are still in the Order menu.
