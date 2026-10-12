@@ -29,6 +29,7 @@
     <button type="button" class="lookbtn">Look closer (compare)</button> &nbsp;
     {% if g.can_besttake %}<a href="/similar/besttake/{{ g.id }}" target="_blank" rel="noopener">Best Take: fix closed eyes &nearr;</a> &nbsp;{% endif %}
     <label><input type="radio" name="pick{{ g.id }}" value="all" {% if g.chosen == 'all' %}checked{% endif %}> Keep all (different photos)</label>
+    &nbsp; <label class="trashopt"><input type="radio" name="pick{{ g.id }}" value="trash" {% if g.chosen == 'trash' %}checked{% endif %}> Discard all (receipts, rubbish)</label>
     &nbsp; <label><input type="radio" name="pick{{ g.id }}" value="later"> Decide later</label>
   </p>
 </section>

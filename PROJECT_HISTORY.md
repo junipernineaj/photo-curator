@@ -432,3 +432,9 @@ moves faster. "Most spare space first" and "Group number" are still in the Order
 
 12:10, 12 Oct: Review Order menu now has: Most spare space first (default), Most photos in the group first, Oldest photos first (by the earliest photo in
 the group, unknown dates last), Newest photos first (by the latest photo), Group number.
+
+13:25, 12 Oct: Review page gets "Discard all (receipts, rubbish)" for groups where nothing should be kept (radio under each group, "Discard all" button
+and D key in the viewer). Stored as mark `trash`, keeper empty. `scripts/quarantine.py` now handles it: the dry run lists every discard-all photo by
+name, each is re-hashed against the index before moving, and the log rule reads "similar: discarded all (no copy kept)"; restore works as for any batch.
+This is the only way a photo can leave the archive with no copy staying, so it is shown in red and the Submit message says how many photos it covered.
+Tested on a fake archive: browser flow, dry run, apply, partial restore, and refusal when the file differs from the index.

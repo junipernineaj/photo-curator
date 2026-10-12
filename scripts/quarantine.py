@@ -15,11 +15,13 @@ their SHA-1 again; any mismatch, missing file or surprise and that file is left 
 At least one copy of every photo always stays.  Sidecars (.json, .xmp, .aae) travel with
 their photo.
 
-The same run also moves the photos you marked "discard" on the near-duplicate Review page
+The same run also moves the photos you marked "discard" (or "discard all") on the near-duplicate Review page
 (/similar/review).  Those are not byte-identical, so the safety checks differ: the photo
 being moved is re-hashed against the index (it is the file you looked at), the keeper you
 picked must still be there, unchanged, and still marked keep.  A discarded Live Photo's
 video goes with it.  If only the moved copy had a date you set by hand, the date is copied to the keeper.
+"Discard all" (receipts, rubbish) is the one exception to "a copy always stays": every photo in that group
+goes to quarantine, each re-hashed against the index first, and is restorable like any other until purged.
 
 Usage:
   scripts/quarantine.py                    # DRY RUN: what the approvals on the Clean-up page would move
@@ -114,16 +116,17 @@ def file_info(db, path):
 
 
 def pending_sim(db, ed):
-    """Photos marked discard on the Review page and not yet moved."""
+    """Photos marked discard (or discard-all, mark 'trash') on the Review page and not yet moved."""
     marks = {r["path"]: r for r in ed.execute("SELECT * FROM sim_mark")}
     out = []
     for r in sorted(marks.values(), key=lambda r: r["path"]):
-        if r["mark"] != "discard" or r["used_batch"]:
+        if r["mark"] not in ("discard", "trash") or r["used_batch"]:
             continue
         v = file_info(db, r["path"])
         if not v:
             continue                                  # already gone from the index
-        k = file_info(db, r["keeper"])
+        trash = r["mark"] == "trash"                  # discard all: there is no keeper
+        k = None if trash else file_info(db, r["keeper"])
         folder = os.path.dirname(v["path"])
         partners = []
         if v["pair_key"]:                             # the Live Photo's video, in the same folder
@@ -132,7 +135,7 @@ def pending_sim(db, ed):
                 if os.path.dirname(pp) == folder:
                     partners.append(file_info(db, pp))
         keeper_ok = bool(k) and marks.get(k["path"]) is not None and marks[k["path"]]["mark"] == "keep"
-        out.append({"victim": v, "keeper": k, "partners": partners, "keeper_ok": keeper_ok})
+        out.append({"victim": v, "keeper": k, "partners": partners, "keeper_ok": keeper_ok, "trash": trash})
     return out
 
 
@@ -155,7 +158,7 @@ def check_file(originals, info):
 
 def move_to_quarantine(originals, batch, ed, manifest, v, k, rule, partners=()):
     """Move a victim, its sidecars and (for a Live Photo) its video half; log each move."""
-    if v["override"] and not k["override"]:
+    if k and v["override"] and not k["override"]:
         ed.execute("INSERT OR IGNORE INTO date_override(path,taken_at,prev_taken_at,prev_source,set_at) "
                    "VALUES (?,?,NULL,'copied from quarantined duplicate',?)",
                    (k["path"], v["override"], datetime.now().isoformat(timespec="seconds")))
@@ -179,8 +182,8 @@ def move_to_quarantine(originals, batch, ed, manifest, v, k, rule, partners=()):
             continue
         os.makedirs(os.path.dirname(qabs), exist_ok=True)
         os.rename(sabs, qabs)
-        log_move(ed, batch, srel, qrel, role, sha, os.path.getsize(qabs), k["path"], rule)
-        manifest.write(f"{srel}\t{qrel}\t{role}\t{k['path']}\n")
+        log_move(ed, batch, srel, qrel, role, sha, os.path.getsize(qabs), k["path"] if k else None, rule)
+        manifest.write(f"{srel}\t{qrel}\t{role}\t{k['path'] if k else '(discard all: none kept)'}\n")
         manifest.flush()
 
 
@@ -239,17 +242,29 @@ def do_run(archive, apply):
         print(f"   moved {n_ok}")
 
     if swork:
-        print(f"Near-duplicate picks (Similar review): {len(swork)} photo(s) marked discard")
+        trashed = [it for it in swork if it["trash"]]
+        print(f"Near-duplicate picks (Similar review): {len(swork)} photo(s) marked discard"
+              + (f", {len(trashed)} of them DISCARD ALL" if trashed else ""))
         total += len(swork)
         if not apply:
-            for it in swork[:3]:
+            for it in [i for i in swork if not i["trash"]][:3]:
                 print(f"   e.g. {it['victim']['path']}\n        (you kept {it['keeper']['path'] if it['keeper'] else '?'})")
+            if trashed:
+                print(f"   DISCARD ALL: {len(trashed)} photo(s) with NO copy kept (restorable from quarantine for "
+                      f"{dupes.RETENTION_DAYS} days):")
+                for it in trashed[:15]:
+                    print(f"        {it['victim']['path']}")
+                if len(trashed) > 15:
+                    print(f"        ... and {len(trashed) - 15} more")
         else:
             n_ok = 0
             for it in swork:
                 v, k = it["victim"], it["keeper"]
                 why = None
-                if not k:
+                if it["trash"]:
+                    for info in [v] + it["partners"]:
+                        why = why or check_file(originals, info)
+                elif not k:
                     why = "the photo you kept is not in the index"
                 elif not it["keeper_ok"]:
                     why = "the photo you kept is no longer marked keep"
@@ -264,7 +279,8 @@ def do_run(archive, apply):
                     print(f"   SKIP {v['path']}: {why}")
                     continue
                 move_to_quarantine(originals, batch, ed, manifest, v, k,
-                                   f"similar: kept {k['path']}", it["partners"])
+                                   "similar: discarded all (no copy kept)" if it["trash"] else f"similar: kept {k['path']}",
+                                   it["partners"])
                 ed.execute("UPDATE sim_mark SET used_batch = ? WHERE path = ?", (batch, v["path"]))
                 ed.commit()
                 moved += 1

@@ -684,7 +684,7 @@ def suggest_keeper(members):
 
 def review_totals(db):
     pend = db.execute("SELECT COUNT(*), COALESCE(SUM(f.size), 0) FROM ed.sim_mark m JOIN main.files f "
-                      "ON f.path = m.path WHERE m.mark = 'discard' AND m.used_batch IS NULL").fetchone()
+                      "ON f.path = m.path WHERE m.mark IN ('discard', 'trash') AND m.used_batch IS NULL").fetchone()
     total = db.execute("SELECT COUNT(DISTINCT group_id) FROM sim.sim_group").fetchone()[0]
     done = db.execute("SELECT COUNT(*) FROM (SELECT g.group_id FROM sim.sim_group g LEFT JOIN ed.sim_mark m "
                       "ON m.path = g.path GROUP BY g.group_id HAVING SUM(m.path IS NULL) = 0)").fetchone()[0]
@@ -725,6 +725,8 @@ def review_page(db, kind, view, order, start, n):
         keeps = [m["path"] for m in members if m["mark"] == "keep"]
         if all(m["mark"] == "keep" for m in members):
             chosen = "all"
+        elif all(m["mark"] == "trash" for m in members):
+            chosen = "trash"
         elif len(keeps) == 1 and all(m["mark"] for m in members):
             chosen = keeps[0]
         else:
@@ -780,6 +782,7 @@ async def similar_decide(request: Request, db=Depends(get_db)):
     now = datetime.now().isoformat(timespec="seconds")
     marks, clears = [], []
     stays = skipped = groups_saved = 0
+    trashed = trashed_photos = 0                      # groups where nothing is kept
     results, listed = {}, {}                          # per group, for the page: what happened / still in this list?
     for gid in qs.get("g", []):
         paths = list(dict.fromkeys(qs.get(f"m{gid}", [])))
@@ -810,6 +813,13 @@ async def similar_decide(request: Request, db=Depends(get_db)):
             groups_saved += 1
             stays += view == "decided"
             results[gid], listed[gid] = "saved", view == "decided"
+        elif pick == "trash":                        # discard all: no photo in the group is kept
+            marks.extend((p, "trash", None, now) for p in paths)
+            groups_saved += 1
+            trashed += 1
+            trashed_photos += len(paths)
+            stays += view == "decided"
+            results[gid], listed[gid] = "saved", view == "decided"
         elif pick in paths:
             marks.extend((p, "keep" if p == pick else "discard", None if p == pick else pick, now) for p in paths)
             groups_saved += 1
@@ -826,8 +836,11 @@ async def similar_decide(request: Request, db=Depends(get_db)):
         con.commit()
     finally:
         con.close()
-    discards = sum(1 for m in marks if m[1] == "discard")
+    discards = sum(1 for m in marks if m[1] in ("discard", "trash"))
     text = f"Saved {groups_saved} group{'' if groups_saved == 1 else 's'} ({discards} photo{'' if discards == 1 else 's'} marked to discard)."
+    if trashed:
+        text += (f" {trashed} of them {'was' if trashed == 1 else 'were'} \"discard all\" "
+                 f"({trashed_photos} photo{'' if trashed_photos == 1 else 's'}, no copy kept).")
     if skipped:
         text += f" {skipped} group{'' if skipped == 1 else 's'} changed since the page loaded and were left alone."
     if ajax:

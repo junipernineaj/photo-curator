@@ -382,8 +382,15 @@ number (`/similar?group=192`).
 Page: `/similar/review`.  Each group of look-alike photos is shown side by side.  Click the one to keep;
 the others are marked **discard**.  The suggestion is preselected (biggest picture, then one with a
 location, then a Live Photo, then the sharpest).  Per group you can also choose **Keep all** (they are
-genuinely different) or **Decide later**.  Nothing is recorded until you press **Save**; the views
+genuinely different), **Discard all** (none is worth keeping: receipts, screenshots, rubbish) or **Decide later**.
+In the close-up viewer: N/Enter next group, P previous, K keep this one, A keep all, D discard all, L later, S submit.
+Nothing is recorded until you press **Submit keepers**, and only for groups you have been through; the views
 "Still to decide" / "Already decided" let you change your mind before anything moves.
+
+**Discard all** is the one choice that leaves no copy of a photo in the archive.  It is stored as mark `trash` with
+no keeper.  `scripts/quarantine.py` (dry run) lists every such photo by name under "DISCARD ALL", re-hashes each one
+before moving it, and logs it with the rule "similar: discarded all (no copy kept)".  It goes to quarantine like
+everything else, so it can be restored for 30 days (`--restore BATCH --path SUB`) before any purge.
 
 Picks are stored in `curator_edits.sqlite` (table `sim_mark`).  The page never moves a file.  Run on the server:
 

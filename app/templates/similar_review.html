@@ -10,7 +10,7 @@
 <p class="muted">For each group, click the picture you want to keep. The others are marked to go to quarantine
 (restorable for 30 days; nothing is deleted). The suggestion is preselected: the biggest picture, then the one
 with a location, then a Live Photo, then the sharpest. If the vision check has run, fewer closed eyes come first. Choose <b>Keep all</b> if they are genuinely different
-photos, or <b>Decide later</b> to come back to a group.</p>
+photos, <b>Discard all</b> if none of them is worth keeping (receipts, screenshots, rubbish), or <b>Decide later</b> to come back to a group.</p>
 <p class="muted">Click a picture to look closer, then work through the groups from there:
 <b>Next group</b> (N or Enter) accepts what is selected and moves on, and <b>K</b> keeps the photo you are looking at.
 A group is only recorded once you have been through it, and only when you press <b>Submit keepers</b>.
@@ -69,6 +69,7 @@ More groups load as you go.</p>
       <button type="button" id="vnextg" title="N or Enter">Next group &raquo;</button>
       <button type="button" id="vkeep" title="K">Keep this one</button>
       <button type="button" id="vall" title="A">Keep all</button>
+      <button type="button" id="vtrash" title="D">Discard all</button>
       <button type="button" id="vlater" title="L">Decide later</button>
       <button type="button" id="vfaces" title="F">Show faces</button>
       <button type="button" id="vprev" title="Left arrow">&larr;</button><button type="button" id="vnext" title="Right arrow">&rarr;</button>
@@ -77,8 +78,8 @@ More groups load as you go.</p>
   <div id="vscroll"><img id="vimg" alt=""></div>
   <div id="vstrip"></div>
   <p class="vhint">Click the picture to zoom to full detail and click again to fit. &larr; &rarr; switch photo ·
-    N / Enter next group · P previous group · K keep this one · A keep all · L decide later · F outline the faces (red = eyes closed) · S submit · Esc close<br>
-    <label><input type="checkbox" id="vauto" checked> K and A move straight on to the next group</label></p>
+    N / Enter next group · P previous group · K keep this one · A keep all · D discard all · L decide later · F outline the faces (red = eyes closed) · S submit · Esc close<br>
+    <label><input type="checkbox" id="vauto" checked> K, A and D move straight on to the next group</label></p>
 </div>
 <script>
 (function () {
@@ -104,12 +105,14 @@ More groups load as you go.</p>
     all('.card', g).forEach(function (c) {
       c.classList.toggle('drop', v !== '' && v !== 'all' && v !== 'later' && c.dataset.path !== v); });
     g.classList.toggle('later', v === 'later');
+    g.classList.toggle('trash', v === 'trash');
   }
   function tag(g) {
     var s = g.querySelector('.rvstate');
     s.textContent = g.classList.contains('stale') ? ' · changed since this page loaded: reload to see it'
-      : g.classList.contains('saved') ? ' · ✓ saved'
-      : g.classList.contains('reviewed') ? ' · ✓ ready to submit' : '';
+      : g.classList.contains('saved') ? ' · ✓ saved' + (groupPick(g) === 'trash' ? ' (discard all)' : '')
+      : g.classList.contains('reviewed') ? ' · ✓ ready to submit' + (groupPick(g) === 'trash' ? ' (discard all)' : '')
+      : groupPick(g) === 'trash' ? ' · discard all: not recorded until you submit' : '';
   }
   function ready() { return all('.rvgroup.reviewed:not(.saved)', wrap); }
   function counts() {
@@ -232,6 +235,7 @@ More groups load as you go.</p>
     var p = groupPick(cur);
     if (p === 'all') return 'KEEP ALL';
     if (p === 'later') return 'DECIDE LATER';
+    if (p === 'trash') return 'DISCARD ALL';
     return cards[idx].classList.contains('drop') ? 'DISCARD' : 'KEEP';
   }
   function show() {
@@ -284,6 +288,7 @@ More groups load as you go.</p>
   function afterChoice() { if (auto.checked) nextGroup(); else show(); }
   function keepThis() { choose(radioOf(cards[idx])); afterChoice(); }
   function keepAll() { choose(cur.querySelector('input[value="all"]')); afterChoice(); }
+  function trash() { choose(cur.querySelector('input[value="trash"]')); afterChoice(); }
   function later() { choose(cur.querySelector('input[value="later"]')); nextGroup(); }
   document.addEventListener('click', function (e) {
     var t = e.target.closest('.thumbimg, .lookbtn');
@@ -302,6 +307,7 @@ More groups load as you go.</p>
   $('vfaces').onclick = toggleFaces;
   $('vkeep').onclick = keepThis;
   $('vall').onclick = keepAll;
+  $('vtrash').onclick = trash;
   $('vlater').onclick = later;
   $('vnextg').onclick = nextGroup;
   $('vprevg').onclick = prevGroup;
@@ -318,6 +324,7 @@ More groups load as you go.</p>
     else if (k === 'p' || k === 'P') prevGroup();
     else if (k === 'k' || k === 'K') keepThis();
     else if (k === 'a' || k === 'A') keepAll();
+    else if (k === 'd' || k === 'D') trash();
     else if (k === 'l' || k === 'L') later();
     else if (k === 'f' || k === 'F') toggleFaces();
     else if (k === 's' || k === 'S') submit();

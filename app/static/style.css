@@ -32,6 +32,9 @@ button.quiet{background:none;border:1px solid var(--line);color:var(--ink)}
 .rvgroup.saved h3{cursor:pointer}
 .rvgroup.saved:not(.expand) .cards,.rvgroup.saved:not(.expand) .rvctl{display:none}
 .rvgroup.stale{outline:2px solid #e5484d}
+.rvgroup.trash .card{border-color:#e5484d;opacity:.55}
+.rvgroup.trash .rvstate{color:#e5484d}
+.trashopt{color:#e5484d}
 .vbtns{flex-wrap:wrap}
 .muted{color:var(--muted)} .small{font-size:13px} .mono{font-family:ui-monospace,Menlo,monospace}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}
