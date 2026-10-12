@@ -636,3 +636,11 @@ who were simply looking away. The method now is:
 Old results (other tags) are redone by the normal run: `git pull`, then `scripts/vision_check.py --limit 40` to see it, then the full
 run in the background. Judge it with `scripts/eye_sheet.py --state closed` (and `open`, `away`): a contact sheet at
 `/derived/eye-sheet.html` showing the face and the strip the model saw. Count how many are really right before trusting the flags.
+
+**Shared Library caution (added 12 Oct, before any Apple deletion).** Any participant can delete anything in the iCloud Shared Photo Library,
+including photos the other person contributed; it goes to Recently Deleted for 30 days and only the contributor can empty it. So:
+never press select-all in "Both Libraries" or "Shared Library" view. Delete only with the Library view set to **Personal Library**.
+Photos you contributed to the Shared Library can be moved back (Image > Move to Personal Library; you cannot move other people's) and then deleted
+from Personal. Photos your wife contributed are hers: leave them. Moving or deleting your own shared photos also removes them for her. Whose
+storage the Shared Library uses (the organiser's, as far as we know) decides whether deleting from it frees anything of yours. The
+`cloud_clear_check.py apple` report does not yet know who contributed each item.
