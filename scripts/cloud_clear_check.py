@@ -225,6 +225,15 @@ def pick(d, *keys):
     return None
 
 
+def group_of(d):
+    """Whose is it?  personal | shared library | someone else's shared album / Shared with You."""
+    if pick(d, "shared_library"):
+        return "Shared Library"
+    if pick(d, "cloud_owner_hashed_id") or (pick(d, "owner") not in (None, "", "None")) or pick(d, "syndicated"):
+        return "from other people (shared albums, Shared with You)"
+    return "personal"
+
+
 def check_apple(w, jpath, report):
     try:
         with open(jpath, encoding="utf-8") as f:
@@ -253,12 +262,15 @@ def check_apple(w, jpath, report):
         if os.path.splitext(p)[1].lower() in VIDEO_EXT:
             vstems.add(norm_stem(p))
 
-    tally = defaultdict(int)
-    missing, namebad, nolive, notdl = [], [], [], []
+    GROUPS = ("personal", "Shared Library", "from other people (shared albums, Shared with You)")
+    tally = {g: defaultdict(int) for g in GROUPS}
+    missing = {g: [] for g in GROUPS}
+    nolive, notdl = [], []
     albums, fav, kw, persons, titled = set(), 0, 0, 0, 0
+    trash = 0
     for d in data:
         if pick(d, "intrash"):
-            tally["in Recently Deleted (ignored)"] += 1
+            trash += 1
             continue
         for a in pick(d, "albums") or []:
             albums.add(a)
@@ -266,54 +278,58 @@ def check_apple(w, jpath, report):
         kw += bool(pick(d, "keywords"))
         persons += bool(pick(d, "persons"))
         titled += bool(pick(d, "title") or pick(d, "description"))
+        g = group_of(d)
         name = pick(d, "original_filename", "filename") or ""
         size = pick(d, "original_filesize", "filesize")
         label = f"{name}  {str(pick(d, 'date') or '')[:10]}  {size} bytes  uuid {pick(d, 'uuid')}"
         if pick(d, "ismissing") or size in (None, 0):
-            tally["not downloaded to this Mac (cannot be checked)"] += 1
-            notdl.append(label)
+            tally[g]["not downloaded to this Mac (cannot be checked)"] += 1
+            missing[g].append("NOT DOWNLOADED: " + label)
             continue
         day = str(pick(d, "date") or "")[:10]
         stem = norm_stem(name)
         cands = by_size.get(size, [])
-        strong = [c for c in cands if c[0] == stem]
-        weak = [c for c in cands if c[1] and c[1] == day]
-        if strong:
-            tally["matched (same size and name)"] += 1
-        elif weak:
-            tally["matched (same size and day, name differs)"] += 1
+        if [c for c in cands if c[0] == stem]:
+            tally[g]["found in the archive (same size and name)"] += 1
+        elif [c for c in cands if c[1] and c[1] == day]:
+            tally[g]["found in the archive (same size and day, name differs)"] += 1
         else:
-            tally["UNACCOUNTED"] += 1
-            missing.append(label)
-            if any(norm_stem(p) == stem for p in w.files):
-                namebad.append(label)
+            tally[g]["NOT in the archive"] += 1
+            missing[g].append(label)
             continue
         if pick(d, "live_photo") and stem not in vstems:
             nolive.append(label)
 
-    say(f"APPLE: {len(data):,} items in the Photos list.")
-    for k, v in tally.items():
-        say(f"  {v:>8,}  {k}")
+    say(f"APPLE: {len(data):,} items in the Photos list ({trash} in Recently Deleted, ignored).")
+    for g in GROUPS:
+        if tally[g]:
+            say(f"  {g}: {sum(tally[g].values()):,} items")
+            for k, v in tally[g].items():
+                say(f"      {v:>7,}  {k}")
     say(f"  Information that lives only in iCloud/Photos: {len(albums):,} albums, {fav:,} favourites, "
         f"{kw:,} with keywords, {persons:,} with named people, {titled:,} with a title or caption.")
     if nolive:
         say(f"  {len(nolive):,} Live Photos whose video half was not found in the archive (check these).")
-    report.append(f"APPLE: {dict(tally)} albums={len(albums)} favourites={fav}")
-    for title, rows in (("APPLE UNACCOUNTED", missing), ("APPLE NAME FOUND BUT SIZE DIFFERS", namebad),
-                        ("APPLE LIVE PHOTO VIDEO NOT FOUND", nolive), ("APPLE NOT DOWNLOADED", notdl)):
-        if rows:
-            report.append(title + ":")
-            report += ["  " + r for r in rows]
-    for r in missing[:10]:
-        say("    missing: " + r)
-    # keep the metadata
+    say("  The list does not say who contributed a Shared Library photo. Do NOT bulk-delete in the Shared Library view.")
+    report.append("APPLE: " + "; ".join(f"{g}: {dict(t)}" for g, t in tally.items()) + f" albums={len(albums)} favourites={fav}")
+    for g in GROUPS:
+        if missing[g]:
+            report.append(f"APPLE NOT IN ARCHIVE / NOT CHECKED ({g}):")
+            report += ["  " + r for r in missing[g]]
+    if nolive:
+        report.append("APPLE LIVE PHOTO VIDEO NOT FOUND:")
+        report += ["  " + r for r in nolive]
+    for g in GROUPS[:2]:
+        for r in missing[g][:5]:
+            say(f"    missing ({g}): {r}")
     mdir = os.path.join(w.root, "cloud-metadata")
     os.makedirs(mdir, exist_ok=True)
     dest = os.path.join(mdir, f"apple-photos-{datetime.now():%Y%m%d}.json")
     if not os.path.exists(dest):
         shutil.copyfile(jpath, dest)
         say(f"  Saved a copy of the Photos list (albums, favourites, people ...) to {dest}")
-    return not missing and not nolive and not notdl
+    # items from other people are not yours to clear, so they do not block; yours and the Shared Library do
+    return not missing["personal"] and not missing["Shared Library"] and not nolive
 
 
 # ---------------------------------------------------------------- the rest
