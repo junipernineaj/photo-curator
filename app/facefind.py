@@ -6,6 +6,8 @@ import threading
 
 import numpy as np
 
+os.environ.setdefault("OPENCV_LOG_LEVEL", "ERROR")       # hides a harmless 'Targets are not supported' notice, one per thread
+
 MODEL = os.environ.get("YUNET_MODEL", os.path.join(os.path.dirname(os.path.abspath(__file__)), "models",
                                                     "face_detection_yunet_2023mar.onnx"))
 _local = threading.local()
