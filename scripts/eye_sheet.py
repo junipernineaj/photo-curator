@@ -7,12 +7,14 @@ the check by eye in a minute instead of opening photos one by one.
   scripts/eye_sheet.py --state away              # heads judged "turned away" (eyes not asked about)
   scripts/eye_sheet.py --state closed --seed 2   # a different random 40
 
-It writes <archive>/../derived/eye-sheet.html and a few small pictures; open
+It writes one self-contained page, <archive>/../derived/eye-sheet.html (pictures are inside it); open
 http://192.168.1.40:8090/derived/eye-sheet.html .  Each cell shows the face, the strip of eyes the model was
 shown, and a link to the whole photo with the faces outlined.  Read-only: it changes nothing but those files.
 """
 import argparse
+import base64
 import html
+import io
 import json
 import os
 import random
@@ -33,6 +35,12 @@ from PIL import Image  # noqa: E402
 from app import facefind, thumbs  # noqa: E402
 
 
+def data_uri(im, quality=85):
+    buf = io.BytesIO()
+    im.save(buf, "JPEG", quality=quality)
+    return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--archive", default=os.environ.get("ARCHIVE", "/media/aj9/Juniper13/photo-archive/originals"))
@@ -43,11 +51,7 @@ def main():
     archive = os.path.realpath(a.archive)
     parent = os.path.dirname(archive)
     derived = os.environ.get("DERIVED", os.path.join(parent, "derived"))
-    out = os.path.join(derived, "eye-sheet")
-    os.makedirs(out, exist_ok=True)
-    for f in os.listdir(out):
-        if f.endswith(".jpg"):
-            os.remove(os.path.join(out, f))
+    os.makedirs(derived, exist_ok=True)
     sim = sqlite3.connect(f"file:{os.environ.get('SIM', os.path.join(parent, 'curator_similar.sqlite'))}?mode=ro", uri=True)
     main_db = sqlite3.connect(f"file:{os.environ.get('DB', os.path.join(parent, 'curator.sqlite'))}?mode=ro", uri=True)
     info = {r[1]: r for r in main_db.execute("SELECT id, path, ext FROM files")}
@@ -78,10 +82,9 @@ def main():
         px, py = (b[2] - b[0]) * w * 0.3, (b[3] - b[1]) * h * 0.3
         face = im.crop((max(0, int(b[0] * w - px)), max(0, int(b[1] * h - py)), min(w, int(b[2] * w + px)), min(h, int(b[3] * h + py))))
         face.thumbnail((240, 240))
-        face.save(os.path.join(out, f"{n}f.jpg"), quality=88)
         g = facefind.geometry(d["k"], w, h)
-        facefind.eye_band(im, d["k"], g, width=300).save(os.path.join(out, f"{n}e.jpg"), quality=88)
-        cells.append(f'<div class="c"><img src="eye-sheet/{n}f.jpg"><br><img src="eye-sheet/{n}e.jpg"><br>'
+        band = facefind.eye_band(im, d["k"], g, width=300)
+        cells.append(f'<div class="c"><img src="{data_uri(face)}"><br><img src="{data_uri(band)}"><br>'
                      f'<span>#{n + 1} turn {g["yaw"]:.2f}, eyes {int(g["d"])}px apart</span><br>'
                      f'<a href="/annotated/{fid}" target="_blank">whole photo</a> · {html.escape(os.path.basename(path))}</div>')
     page = ("<!doctype html><meta charset=utf-8><title>Eye check sheet</title><style>"
