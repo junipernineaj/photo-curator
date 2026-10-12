@@ -405,3 +405,12 @@ repairs the old results; model tag `/faces-v5`. Review suggestion and Best Take 
 the remaining problems: a face "found" in a plate of food, a painting, two people turned away called closed, and false closed in a
 12-face group. Rewrote the method (`/faces-v6`): detector landmarks, turned heads skipped, eyes judged from a level close-up strip of
 the two eyes; removed `--revalidate` and the model-finds-faces path; added `scripts/eye_sheet.py` (contact sheet to check results by eye).
+
+10:25, 12 Oct: cloud clear status. Apple: Mac list (3,465 items, 3,195 in Photos, matches the iPhone) is the whole iCloud library: 1,183 Tony's
+own (all in the archive), 2,063 Shared Library (2 not in archive: IMG_2762/2763, Oct 2025), 219 from other people. Small because the
+camera roll went to Google Photos and old photos left the phone. Apple clearing DEFERRED by Tony (open: 262 Live Photo video halves, the
+two missing Shared Library photos, backup, offsite). Google: Takeout started 9 Oct, newest Google photo taken 7 Oct, deleted 11 Oct.
+`cloud_clear_check.py google` run on the real zips: 44,678 listed, 0 unaccounted (42,938 in archive, 124 + 1,400 quarantined, 216 album copies),
+VERDICT READY. Tony removed the Google Photos app from the iPhone. Still to do: backup.sh --apply, look in Google's bin for anything
+after 7 Oct, check other devices / Drive for desktop are not uploading, refresh offsite before the bin expires (~10 Dec).
+New habit needed: with Google backup gone, new iPhone photos exist only on the phone and iCloud until the weekly pull is built.
