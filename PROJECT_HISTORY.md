@@ -427,3 +427,5 @@ Tested in headless Chromium against a 60-group fake archive. The old Save button
 
 11:50, 12 Oct: Review list order: new default "Most photos in the group first" (then most spare space, then group number), so big groups go first and progress
 moves faster. "Most spare space first" and "Group number" are still in the Order menu.
+
+11:45, 12 Oct: Review list default order put back to "Most spare space first" at Tony's request. "Most photos in the group first" stays in the Order menu as an option.

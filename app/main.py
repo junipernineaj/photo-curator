@@ -740,12 +740,12 @@ def review_page(db, kind, view, order, start, n):
 def review_args(kind, view, order):
     return (kind if kind in ("cross", "burst", "spread", "unknown") else "",
             "decided" if view == "decided" else "pending",
-            order if order in ("group", "space") else "count")
+            order if order in ("group", "count") else "space")
 
 
 @app.get("/similar/review", response_class=HTMLResponse)
 def similar_review(request: Request, db=Depends(get_db), kind: str = "", view: str = "pending",
-                   order: str = "count", msg: str = ""):
+                   order: str = "space", msg: str = ""):
     kind, view, order = review_args(kind, view, order)
     built = db.execute("SELECT v FROM sim.sim_meta WHERE k = 'built_at'").fetchone()
     groups, shown = review_page(db, kind, view, order, 0, REVIEW_CHUNK)
@@ -756,7 +756,7 @@ def similar_review(request: Request, db=Depends(get_db), kind: str = "", view: s
 
 
 @app.get("/similar/review/chunk")
-def similar_review_chunk(db=Depends(get_db), kind: str = "", view: str = "pending", order: str = "count",
+def similar_review_chunk(db=Depends(get_db), kind: str = "", view: str = "pending", order: str = "space",
                          start: int = 0):
     """The next slice of the list as ready-made HTML, for the page to append."""
     kind, view, order = review_args(kind, view, order)
