@@ -19,6 +19,13 @@ to it, on localhost.  Results go in curator_similar.sqlite (derived data; safe t
   scripts/vision_check.py --only all             # also groups that are copies of one shot (adds little)
   scripts/vision_check.py --all                  # include groups already decided
   scripts/vision_check.py --model qwen2.5vl:7b   # choose the model (default: first vision model found)
+  scripts/vision_check.py --revalidate           # fix earlier results (see below); quick, no model needed
+  scripts/vision_check.py --qwen-heads           # old method: let the model find the faces too (invents faces)
+
+Where the faces are comes from a small face detector (app/facefind.py, YuNet, CPU), not from the vision model:
+asked to find every head, the model invented faces in scenery and then called most of them "closed".
+--revalidate re-checks results made by the older method: it keeps only faces the detector also sees,
+fixes the boxes, and drops the model's verdict where the box was not really a face.  A few minutes, no GPU.
 
 Resumable: Ctrl-C any time and run it again; finished photos are skipped.  Photos are handled in the
 order the Review page shows them (most spare space first), so what you review first is done first.
@@ -50,9 +57,11 @@ except ImportError:
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from PIL import Image  # noqa: E402
-from app import similar, thumbs  # noqa: E402
+from app import facefind, similar, thumbs  # noqa: E402
 
-MODEL_TAG = "/faces-v4"        # stored with the model name; bump to redo everything after a method change
+MODEL_TAG = "/faces-v5"        # stored with the model name; bump to redo everything after a method change
+OLD_TAG = "/faces-v4"          # the model found the faces itself (invents faces); --revalidate repairs these
+FIXED_TAG = OLD_TAG + "+yunet"  # old results repaired by --revalidate
 FIND_PROMPT = ("Locate the head of every person in the image, including small people in the background. "
                "Box the face and hair only, not the neck, body or legs. "
                "Output the bounding box of each face in JSON, like "
@@ -149,9 +158,10 @@ def find_faces(url, model, im):
 
 
 RAW = False            # --raw: print the model's exact answers
+QWEN_HEADS = False     # --qwen-heads: the old way
 
 
-def judge_faces(url, model, im, boxes):
+def judge_faces(url, model, im, boxes, pad=0.15):
     """One call per face crop -> list of (eyes, looking); 'unclear' for tiny faces or unreadable answers."""
     w, h = im.size
     out = []
@@ -160,7 +170,7 @@ def judge_faces(url, model, im, boxes):
         if min(bw, bh) < MIN_FACE_PX:
             out.append(("unclear", "camera"))
             continue
-        px, py = bw * 0.15, bh * 0.15
+        px, py = bw * pad, bh * pad
         c = im.crop((max(0, int(b[0] * w - px)), max(0, int(b[1] * h - py)),
                      min(w, int(b[2] * w + px)), min(h, int(b[3] * h + py))))
         c.thumbnail((336, 336))
@@ -176,14 +186,90 @@ def ask(url, model, jpeg_path):
     """-> (faces, eyes_closed, looking_away, note, detail_json)"""
     with Image.open(jpeg_path) as im0:
         im = im0.convert("RGB")
-    boxes = find_faces(url, model, im)[:MAX_FACES]
-    states = judge_faces(url, model, im, boxes) if boxes else []
+    if QWEN_HEADS:
+        boxes = find_faces(url, model, im)[:MAX_FACES]
+        states = judge_faces(url, model, im, boxes) if boxes else []
+    else:
+        boxes = [list(b) for b, _ in facefind.detect(im)[:MAX_FACES]]
+        states = judge_faces(url, model, im, boxes, pad=0.3) if boxes else []
     closed = sum(1 for e, _ in states if e == "closed")
     away = sum(1 for e, lk in states if lk == "away")
     unclear = sum(1 for e, _ in states if e == "unclear")
     detail = [{"b": [round(v, 4) for v in b], "e": e, "l": lk} for b, (e, lk) in zip(boxes, states)]
     note = f"{unclear} too small or unclear" if unclear else ""
     return len(boxes), closed, away, note, json.dumps(detail, separators=(",", ":"))
+
+
+def area(b):
+    return (b[2] - b[0]) * (b[3] - b[1])
+
+
+def merge_boxes(old, im_size, found):
+    """old: the earlier [{b, e, l}] from the model.  found: [(box, score)] from the face detector.
+    Keep only real faces, with the detector's box; reuse the model's verdict where its box was a
+    sensible crop of that one face, otherwise 'unclear'."""
+    w, h = im_size
+    centres = [((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) for b, _ in found]
+    out = []
+    for (b, _), (cx, cy) in zip(found[:MAX_FACES], centres):
+        holding = [d for d in old if d["b"][0] <= cx <= d["b"][2] and d["b"][1] <= cy <= d["b"][3]]
+        e = "unclear"
+        if holding:
+            q = min(holding, key=lambda d: area(d["b"]))
+            shared = sum(1 for (ox, oy) in centres if q["b"][0] <= ox <= q["b"][2] and q["b"][1] <= oy <= q["b"][3])
+            if shared == 1 and area(q["b"]) <= 4 * area(b):          # a crop of this face, not of a whole group or body
+                e = q["e"]
+        if min((b[2] - b[0]) * w, (b[3] - b[1]) * h) < MIN_FACE_PX:
+            e = "unclear"
+        out.append({"b": [round(v, 4) for v in b], "e": e, "l": "camera"})
+    return out
+
+
+def revalidate(a, con, info_by_path, archive, thumbs_dir):
+    rows = con.execute("SELECT path, size, mtime_ns, model, faces, detail FROM vision "
+                       "WHERE status = 'ok' AND model LIKE ?", ("%" + OLD_TAG,)).fetchall()
+    rows = [r for r in rows if r[0] in info_by_path and (not a.match or a.match.lower() in r[0].lower())]
+    if a.limit:
+        rows = rows[:a.limit]
+    print(f"Repairing {len(rows)} earlier result(s) with the face detector.")
+    if not rows:
+        return
+
+    def work(r):
+        path, size, mtime, model, faces, detail = r
+        fid, _, ext, _, _ = info_by_path[path]
+        jpg = thumbs.get_or_make(thumbs_dir, fid, os.path.join(archive, path), ext, False, "preview")
+        if not jpg:
+            return r, None
+        with Image.open(jpg) as im0:
+            im = im0.convert("RGB")
+        old = json.loads(detail) if detail else []
+        return r, (merge_boxes(old, im.size, facefind.detect(im)), len(old))
+
+    t0, n, was, now_faces, now_closed = time.time(), 0, 0, 0, 0
+    with ThreadPoolExecutor(max(1, a.workers)) as pool:
+        for r, res in pool.map(work, rows):
+            n += 1
+            if res is None:
+                continue
+            det, before = res
+            closed = sum(1 for d in det if d["e"] == "closed")
+            unclear = sum(1 for d in det if d["e"] == "unclear")
+            was += before
+            now_faces += len(det)
+            now_closed += closed
+            con.execute("UPDATE vision SET model = ?, faces = ?, eyes_closed = ?, looking_away = 0, note = ?, detail = ? "
+                        "WHERE path = ?", (r[3] + "+yunet", len(det), closed,
+                                           f"{unclear} too small or unclear" if unclear else "",
+                                           json.dumps(det, separators=(",", ":")), r[0]))
+            if n % 200 == 0:
+                con.commit()
+            if n % 1000 == 0:
+                rate = n / (time.time() - t0)
+                print(f"  {n}/{len(rows)}  ({rate:.0f}/s, about {(len(rows) - n) / rate / 60:.0f} min left)")
+    con.commit()
+    print(f"Done. Faces the model had found: {was:,}.  Real faces after the check: {now_faces:,} "
+          f"({now_closed:,} judged closed).")
 
 
 def main():
@@ -201,16 +287,22 @@ def main():
     ap.add_argument("--workers", type=int, default=1, help="requests at once (1 is fine; try 2 on a big GPU)")
     ap.add_argument("--retry", action="store_true", help="try earlier failures again")
     ap.add_argument("--raw", action="store_true", help="print the model's exact answer for each face")
+    ap.add_argument("--revalidate", action="store_true",
+                    help="repair results made by the older method using the face detector (quick, no model needed)")
+    ap.add_argument("--qwen-heads", action="store_true", help="old method: the model finds the faces itself")
     a = ap.parse_args()
-    global RAW
+    global RAW, QWEN_HEADS, MODEL_TAG
     RAW = a.raw
+    QWEN_HEADS = a.qwen_heads
+    if QWEN_HEADS:
+        MODEL_TAG = OLD_TAG
     url = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
     if a.list_models:
         for m in ollama(url, "/api/tags", timeout=10).get("models", []):
             print(m["name"])
         return
-    model = pick_model(url, a.model)
-    tag = model + MODEL_TAG
+    model = None if a.revalidate else pick_model(url, a.model)
+    tag = None if a.revalidate else model + MODEL_TAG
 
     archive = os.path.realpath(a.archive)
     parent = os.path.dirname(archive)
@@ -230,6 +322,11 @@ def main():
         except sqlite3.Error:
             pass                                       # no picks recorded yet
     info = {r[1]: r for r in main_db.execute("SELECT id, path, ext, size, mtime_ns FROM files WHERE kind = 'photo'")}
+    if a.revalidate:
+        if a.workers == 1:
+            a.workers = 4
+        revalidate(a, con, info, archive, thumbs_dir)
+        return
     groups = {}
     for gid, path, best in con.execute("SELECT group_id, path, is_best FROM sim_group"):
         groups.setdefault(gid, []).append((path, best))
@@ -251,7 +348,7 @@ def main():
         for p in paths:
             h = have.get(p)
             fid, _, ext, size, mtime = info[p]
-            if h and h[:3] == (size, mtime, tag) and (h[3] == "ok" or not a.retry):
+            if h and h[0] == size and h[1] == mtime and h[2] in (tag, model + FIXED_TAG) and (h[3] == "ok" or not a.retry):
                 continue
             if a.match and a.match.lower() not in p.lower():
                 continue
