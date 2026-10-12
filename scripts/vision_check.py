@@ -272,6 +272,25 @@ def revalidate(a, con, info_by_path, archive, thumbs_dir):
           f"({now_closed:,} judged closed).")
 
 
+def finish(url, model, jpeg_path, detail):
+    """Results already repaired by --revalidate: ask the model only about faces still marked unclear
+    that are big enough to judge.  -> same tuple as ask()."""
+    with Image.open(jpeg_path) as im0:
+        im = im0.convert("RGB")
+    w, h = im.size
+    det = json.loads(detail) if detail else []
+    idx = [i for i, d in enumerate(det) if d["e"] == "unclear"
+           and min((d["b"][2] - d["b"][0]) * w, (d["b"][3] - d["b"][1]) * h) >= MIN_FACE_PX]
+    if idx:
+        states = judge_faces(url, model, im, [det[i]["b"] for i in idx], pad=0.3)
+        for i, (e, _) in zip(idx, states):
+            det[i]["e"] = e
+    closed = sum(1 for d in det if d["e"] == "closed")
+    unclear = sum(1 for d in det if d["e"] == "unclear")
+    note = f"{unclear} too small or unclear" if unclear else ""
+    return len(det), closed, 0, note, json.dumps(det, separators=(",", ":"))
+
+
 def main():
     sys.stdout.reconfigure(line_buffering=True)      # show progress at once, even when redirected to a file
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -343,12 +362,14 @@ def main():
         order.append((-spare, gid, paths))
     order.sort()
     have = {r[0]: r[1:] for r in con.execute("SELECT path, size, mtime_ns, model, status FROM vision")}
+    repaired = {r[0]: r[1] for r in con.execute("SELECT path, detail FROM vision WHERE model = ? AND status = 'ok'",
+                                                (model + FIXED_TAG,))} if not QWEN_HEADS else {}
     todo = []
     for _, _, paths in order:
         for p in paths:
             h = have.get(p)
             fid, _, ext, size, mtime = info[p]
-            if h and h[0] == size and h[1] == mtime and h[2] in (tag, model + FIXED_TAG) and (h[3] == "ok" or not a.retry):
+            if h and h[0] == size and h[1] == mtime and h[2] == tag and (h[3] == "ok" or not a.retry):
                 continue
             if a.match and a.match.lower() not in p.lower():
                 continue
@@ -366,6 +387,8 @@ def main():
             return row, None, "could not make a preview"
         try:
             t = time.time()
+            if path in repaired:                         # repaired earlier: judge only the faces still unclear
+                return row, finish(url, model, jpg, repaired[path]) + (time.time() - t,), None
             return row, ask(url, model, jpg) + (time.time() - t,), None
         except (urllib.error.URLError, OSError, ValueError, KeyError) as e:
             return row, None, f"{type(e).__name__}: {e}"
