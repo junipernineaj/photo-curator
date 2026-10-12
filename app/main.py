@@ -700,8 +700,11 @@ def review_page(db, kind, view, order, start, n):
             f"LEFT JOIN ed.sim_mark m ON m.path = g.path {where} GROUP BY g.group_id {having}")
     shown = db.execute(f"SELECT COUNT(*) FROM (SELECT g.group_id {base})").fetchone()[0]
     space = "SUM(f.size) - SUM(CASE WHEN g.is_best = 1 THEN f.size ELSE 0 END) DESC, g.group_id"
-    sort = ("g.group_id" if order == "group" else space if order == "space"
-            else f"COUNT(*) DESC, {space}")
+    sort = {"group": "g.group_id",
+            "count": f"COUNT(*) DESC, {space}",
+            "oldest": "MIN(f.taken_at) IS NULL, MIN(f.taken_at), g.group_id",      # earliest photo in the group; unknown dates last
+            "newest": "MAX(f.taken_at) IS NULL, MAX(f.taken_at) DESC, g.group_id",
+            }.get(order, space)
     gids = [r[0] for r in db.execute(f"SELECT g.group_id {base} ORDER BY {sort} LIMIT ? OFFSET ?", (n, start))]
     geo = "mf.lat IS NOT NULL" if geo_ready(db) else "0"
     groups = []
@@ -740,7 +743,7 @@ def review_page(db, kind, view, order, start, n):
 def review_args(kind, view, order):
     return (kind if kind in ("cross", "burst", "spread", "unknown") else "",
             "decided" if view == "decided" else "pending",
-            order if order in ("group", "count") else "space")
+            order if order in ("group", "count", "oldest", "newest") else "space")
 
 
 @app.get("/similar/review", response_class=HTMLResponse)
