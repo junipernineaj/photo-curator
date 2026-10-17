@@ -10,7 +10,7 @@
 #      <backup>/snapshots/ using SQLite's own backup, and checks each with integrity_check.
 #   2. rsync's the archive to the backup disk. It NEVER deletes anything on the backup
 #      (no --delete), so files moved to quarantine or parked stay in the backup under their old
-#      paths until you decide to prune it. Excludes thumbs/, takeout-unpacked/, takeout-zips/.
+#      paths until you decide to prune it. Excludes thumbs/, takeout-unpacked/, takeout-zips/ and the same two for the wife's Takeout (-wife).
 #   3. Writes LAST_BACKUP.txt on the backup disk and a log in ~/backup-<timestamp>.log.
 #   4. With --verify: an rsync checksum dry run (-avhnc); it must list nothing.
 #
@@ -35,7 +35,7 @@ done
 
 STAMP="$(date +%Y%m%d-%H%M%S)"; DAY="$(date +%F)"
 LOG="$HOME/backup-$STAMP.log"
-EXCL=(--exclude 'thumbs/' --exclude 'takeout-unpacked/' --exclude 'takeout-zips/')
+EXCL=(--exclude 'thumbs/' --exclude 'takeout-unpacked/' --exclude 'takeout-zips/' --exclude 'takeout-unpacked-wife/' --exclude 'takeout-zips-wife/')
 RS=(rsync -avh --partial "${EXCL[@]}")
 
 if [ "$APPLY" = 0 ]; then

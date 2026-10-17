@@ -142,6 +142,7 @@ SOURCE_LABELS = {
     "exports": "Old Photos library export",
     "photos-catchall": "Old photo folders",
     "google": "Google Photos",
+    "google-wife": "Google Photos (wife)",
     "scans": "Scanned prints",
     "best-take": "Best Take (assembled from burst frames)",
 }

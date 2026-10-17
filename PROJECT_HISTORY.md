@@ -438,3 +438,10 @@ and D key in the viewer). Stored as mark `trash`, keeper empty. `scripts/quarant
 name, each is re-hashed against the index before moving, and the log rule reads "similar: discarded all (no copy kept)"; restore works as for any batch.
 This is the only way a photo can leave the archive with no copy staying, so it is shown in red and the Submit message says how many photos it covered.
 Tested on a fake archive: browser flow, dry run, apply, partial restore, and refusal when the file differs from the index.
+
+13:50, 17 Oct: wife's Google Takeouts to be added. Kept separate from Tony's: zips in `takeout-zips-wife/`, staging `takeout-unpacked-wife/`, imported to
+`originals/google-wife/` (label "Google Photos (wife)", ranked right after "google" in `SOURCE_ORDER`), all three excluded/handled in `backup.sh`
+(zips and staging not backed up; the archive copy is). New read-only `scripts/takeout_compare.py`: reads only the zips' tables of contents plus
+CRC-32 of same-size archive files, to say how many of her files are album copies, already in the archive, matching quarantined files, or new, by year,
+and how much disk unpacking needs. Tested on a small fake archive. Procedure in RUNBOOK, "Another person's Google Takeout". Offsite drive refresh
+still to do after the import.

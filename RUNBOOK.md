@@ -293,6 +293,58 @@ Dates: a photo with no EXIF date takes its date from the sidecar (`Date from Goo
 in the app's date-source filter). Keep the Google account's photos until the archive has a
 second copy; Google's trash keeps deleted items 60 days.
 
+## Another person's Google Takeout (the wife's, added 17 Oct)
+
+Her photos are kept apart from yours: zips in `takeout-zips-wife/`, unpacked in `takeout-unpacked-wife/`, imported to
+`originals/google-wife/` (shown as "Google Photos (wife)"). Your `cloud_clear_check.py google` only reads `takeout-zips/`, so it
+is not confused by her files, and `backup.sh` leaves her zips and staging out (the archive copy is what is backed up).
+She keeps her Google library; this only gives the archive a second, central copy to curate.
+
+```
+# 0. room first (zips + unpacked copy + the archive growing). The compare script in step 3 also checks.
+df -h /media/aj9/Juniper13
+mkdir -p /media/aj9/Juniper13/photo-archive/takeout-zips-wife
+
+# 1. get the zips onto the server (pick one)
+#    Mac or Linux, from her computer:   caffeinate -d rsync -avh --partial --progress ~/Downloads/takeout-*.zip aj9@192.168.1.40:/media/aj9/Juniper13/photo-archive/takeout-zips-wife/
+#    Windows (PowerShell, from Downloads): scp takeout-*.zip aj9@192.168.1.40:/media/aj9/Juniper13/photo-archive/takeout-zips-wife/
+#    A USB drive plugged into the server is fastest for hundreds of GB: cp the zips into that folder.
+
+# 2. check every zip arrived whole
+cd /media/aj9/Juniper13/photo-archive/takeout-zips-wife && for z in takeout-*.zip; do echo "== $z"; unzip -tq "$z" | tail -1; done
+
+# 3. what is in there? READ-ONLY: nothing unpacked, nothing moved
+cd ~/photo-curator && git pull && scripts/scan_archive.py       # first make sure the index is current
+scripts/takeout_compare.py
+
+# 4. only after looking at the report: unpack (tmux; long), dry-run the import, then do it
+mkdir -p /media/aj9/Juniper13/photo-archive/takeout-unpacked-wife && cd /media/aj9/Juniper13/photo-archive/takeout-unpacked-wife
+for z in ../takeout-zips-wife/takeout-*.zip; do echo "== $z"; unzip -q -o "$z"; done
+cd ~/photo-curator
+A=/media/aj9/Juniper13/photo-archive
+scripts/import_takeout.py --staging $A/takeout-unpacked-wife --dest $A/originals/google-wife --report $A/takeout-import-report-wife.txt
+scripts/import_takeout.py --staging $A/takeout-unpacked-wife --dest $A/originals/google-wife --report $A/takeout-import-report-wife.txt --apply
+
+# 5. index and fingerprint (not while vision_check is running)
+scripts/scan_archive.py
+~/venvs/curator/bin/python scripts/find_similar.py
+
+# 6. back up, then refresh the offsite drive
+scripts/backup.sh --apply
+```
+
+`takeout_compare.py` reads only each zip's table of contents (names, sizes, CRC-32) and, for the few archive files with a matching
+size, their CRC-32. It reports how many of her photos and videos are album copies of each other, already in the archive (by source),
+identical to something sitting in quarantine, or new (by year), and how much disk unpacking needs. It cannot see the same
+picture saved with different bytes (Storage-saver re-encodes, edits); `find_similar.py` finds those after the import.
+
+Things to watch once hers is in:
+- **Clean-up** will show rules between sources, e.g. "keep google, quarantine google-wife". Photos you both have are now one copy; read
+  a rule's pairs before approving. Her copy ranks just after yours (`SOURCE_ORDER`, `app/dupes.py`).
+- **Pick the keeper** will mix your photos and hers in the same groups. Only discard what you are sure about; hers are hers.
+- Items identical to something in quarantine would come back as "new" once imported, and are listed in the compare report so you can see them.
+- Keep her zips until the import is backed up; they are the second copy of her Google data.
+
 ## Run the browse app
 
 A read-only web page over the scan index: a thumbnail grid you can filter by year, type

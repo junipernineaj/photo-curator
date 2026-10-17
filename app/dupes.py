@@ -18,6 +18,7 @@ QUARANTINE = "_quarantine"          # under originals/; the scanner skips folder
 # A source is the first folder, or the first two for the catch-all folders.
 SOURCE_ORDER = [
     "google",                                       # Takeout copy: carries the .json sidecar
+    "google-wife",                                  # a second person's Takeout (same reasons, ranked after yours)
     "apple",                                        # iCloud originals
     "apple-shared",
     "exports",
