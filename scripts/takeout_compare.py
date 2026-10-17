@@ -122,22 +122,41 @@ def plan_extract(zpath, chosen):
 
 
 def extract(zpath, plan, root):
+    """Unpack the planned entries.  A file that cannot be written is recorded and the rest carry on.
+    Returns (unpacked, already there, problems [(entry, why)])."""
     done = skipped = 0
+    problems = []
+    written = set()
     for zb, infos in plan.items():
         with zipfile.ZipFile(zpath[zb]) as zf:
             for i in infos:
                 dest = safe_dest(root, i.filename)
                 if dest is None:
-                    print(f"   SKIP unsafe name {i.filename!r}")
+                    problems.append((i.filename, "unsafe name"))
+                    continue
+                if dest in written:
+                    problems.append((i.filename, f"same path as another entry already unpacked this run ({zb})"))
                     continue
                 if os.path.exists(dest) and os.path.getsize(dest) == i.file_size:
                     skipped += 1
+                    written.add(dest)
                     continue
-                os.makedirs(os.path.dirname(dest), exist_ok=True)
                 tmp = dest + ".part"
-                with zf.open(i) as src, open(tmp, "wb") as dst:
-                    shutil.copyfileobj(src, dst, 1 << 20)
-                os.replace(tmp, dest)
+                try:
+                    os.makedirs(os.path.dirname(dest), exist_ok=True)
+                    with zf.open(i) as src, open(tmp, "wb") as dst:
+                        shutil.copyfileobj(src, dst, 1 << 20)
+                    if os.path.getsize(tmp) != i.file_size:
+                        raise OSError("written size differs from the zip's")
+                    os.replace(tmp, dest)
+                except (OSError, zipfile.BadZipFile, zlib.error, RuntimeError) as e:
+                    problems.append((i.filename, f"{type(e).__name__}: {e}"))
+                    try:
+                        os.remove(tmp)
+                    except OSError:
+                        pass
+                    continue
+                written.add(dest)
                 try:
                     t = time.mktime(tuple(i.date_time) + (0, 0, -1))
                     os.utime(dest, (t, t))
@@ -146,7 +165,7 @@ def extract(zpath, plan, root):
                 done += 1
                 if done % 1000 == 0:
                     print(f"   {done:,} unpacked", flush=True)
-    return done, skipped
+    return done, skipped, problems
 
 
 def load_archive(root):
@@ -308,10 +327,26 @@ def main():
     if not a.apply:
         print("This was a plan. Add --apply to unpack. (Nothing has been written.)")
         return
-    done, skipped = extract(zpath, plan, a.extract_to)
-    print(f"\nUnpacked {done:,} file(s); {skipped:,} were already there. Next: scripts/import_takeout.py "
-          f"--staging {a.extract_to} --dest <archive>/originals/google-wife --report <archive>/takeout-import-report-wife.txt")
-
+    done, skipped, problems = extract(zpath, plan, a.extract_to)
+    print(f"\nUnpacked {done:,} file(s); {skipped:,} were already there.")
+    # check: every photo/video we meant to unpack is now present at the right size
+    want = {safe_dest(a.extract_to, i.filename): i.file_size for v in plan.values() for i in v
+            if not i.filename.lower().endswith(".json")}
+    present = sum(1 for d, sz in want.items() if d and os.path.isfile(d) and os.path.getsize(d) == sz)
+    print(f"Photos/videos present in staging: {present:,} of {len(want):,} expected"
+          + ("" if present == len(want) else "   <-- NOT ALL THERE, see below"))
+    if problems:
+        prob = os.path.join(a.archive, f"takeout-extract-problems-{a.label}-{datetime.now():%Y%m%d-%H%M%S}.txt")
+        with open(prob, "w") as f:
+            for name, why in problems:
+                f.write(f"{name}\t{why}\n")
+        print(f"{len(problems):,} file(s) could NOT be unpacked (first few below; all in {prob}):")
+        for name, why in problems[:8]:
+            print(f"   {name}\n        {why}")
+        print("Do not import until this is understood.")
+    else:
+        print("No problems. Next: scripts/import_takeout.py --staging "
+              f"{a.extract_to} --dest <archive>/originals/google-wife --report <archive>/takeout-import-report-wife.txt")
 
 if __name__ == "__main__":
     main()
