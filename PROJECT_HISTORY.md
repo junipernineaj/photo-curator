@@ -445,3 +445,9 @@ Tested on a fake archive: browser flow, dry run, apply, partial restore, and ref
 CRC-32 of same-size archive files, to say how many of her files are album copies, already in the archive, matching quarantined files, or new, by year,
 and how much disk unpacking needs. Tested on a small fake archive. Procedure in RUNBOOK, "Another person's Google Takeout". Offsite drive refresh
 still to do after the import.
+
+23:30, 17 Oct: first run of `takeout_compare.py` on the wife's Takeout (250 GB of zips): 27,120 distinct files; 19,294 already in the archive byte for byte
+(19,267 of them in Tony's own `google/`, 19 in apple-shared, 7 in exports, 1 in Doha-masters; 116.3 GB), 1,343 identical to files Tony discarded (now in
+quarantine), 6,483 new (22.8 GB; 2013 to 2026, mostly 2013-2015, 2017 and 2025). The two Google libraries clearly overlap heavily. Unpacking everything would
+need 337 GB, so `takeout_compare.py` gained `--extract-to STAGING [--apply] [--also-discarded]`: unpacks only the new files plus their .json sidecars
+(writes only to the staging folder, never into the archive; dry-run by default). RUNBOOK step 4 updated.

@@ -17,10 +17,17 @@ The full list (every new file, and which archive file each duplicate matches) go
 Not detected here: the SAME picture saved with different bytes (Google "Storage saver" re-encodes,
 edited copies, resized exports).  Those are found by scripts/find_similar.py after the import.
 
+With --extract-to STAGING it can then unpack ONLY the new files (plus the small .json sidecar files from the same
+folders) into a staging folder outside originals/, laid out the way scripts/import_takeout.py expects.  Without --apply
+it only says what it would unpack.  That avoids unpacking the duplicates, which can be most of a Takeout.  Items matching
+something you sent to quarantine are left out unless you add --also-discarded.  It never writes inside the archive.
+
 Usage:
   scripts/takeout_compare.py                              # zips in <archive>/takeout-zips-wife
   scripts/takeout_compare.py --zips DIR --label wife
   scripts/takeout_compare.py --archive /media/aj9/Juniper13/photo-archive
+  scripts/takeout_compare.py --extract-to STAGING         # plan: what would be unpacked, and the space needed
+  scripts/takeout_compare.py --extract-to STAGING --apply # do it
 """
 import argparse
 import glob
@@ -29,6 +36,7 @@ import re
 import shutil
 import sqlite3
 import sys
+import time
 import zipfile
 import zlib
 from collections import Counter, defaultdict
@@ -89,6 +97,58 @@ def read_zips(zips):
     return media, other, bad
 
 
+def safe_dest(root, name):
+    """Where a zip entry goes under root, or None if its name tries to climb out of it."""
+    parts = [p for p in name.split("/") if p not in ("", ".")]
+    if not parts or name.startswith("/") or any(p == ".." for p in parts):
+        return None
+    dest = os.path.join(root, *parts)
+    return dest if os.path.realpath(dest).startswith(os.path.realpath(root) + os.sep) else None
+
+
+def plan_extract(zpath, chosen):
+    """chosen: [(zip base name, entry name)].  Returns {zip base name: [ZipInfo]}: those entries plus every
+    .json file in the same folders (sidecars; the import script matches them to photos)."""
+    by_zip = defaultdict(set)
+    for zb, name in chosen:
+        by_zip[zb].add(name)
+    out = {}
+    for zb, names in by_zip.items():
+        with zipfile.ZipFile(zpath[zb]) as zf:
+            folders = {n.rsplit("/", 1)[0] for n in names}
+            out[zb] = [i for i in zf.infolist() if not i.is_dir() and (
+                i.filename in names or (i.filename.lower().endswith(".json") and i.filename.rsplit("/", 1)[0] in folders))]
+    return out
+
+
+def extract(zpath, plan, root):
+    done = skipped = 0
+    for zb, infos in plan.items():
+        with zipfile.ZipFile(zpath[zb]) as zf:
+            for i in infos:
+                dest = safe_dest(root, i.filename)
+                if dest is None:
+                    print(f"   SKIP unsafe name {i.filename!r}")
+                    continue
+                if os.path.exists(dest) and os.path.getsize(dest) == i.file_size:
+                    skipped += 1
+                    continue
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                tmp = dest + ".part"
+                with zf.open(i) as src, open(tmp, "wb") as dst:
+                    shutil.copyfileobj(src, dst, 1 << 20)
+                os.replace(tmp, dest)
+                try:
+                    t = time.mktime(tuple(i.date_time) + (0, 0, -1))
+                    os.utime(dest, (t, t))
+                except (OverflowError, ValueError, OSError):
+                    pass
+                done += 1
+                if done % 1000 == 0:
+                    print(f"   {done:,} unpacked", flush=True)
+    return done, skipped
+
+
 def load_archive(root):
     db = sqlite3.connect(f"file:{os.path.join(root, 'curator.sqlite')}?mode=ro", uri=True)
     by_size = defaultdict(list)                              # size -> [(relative path under originals, label)]
@@ -117,6 +177,10 @@ def main():
     ap.add_argument("--archive", default=ARCHIVE_ROOT)
     ap.add_argument("--zips", help="folder holding the takeout-*.zip files (default <archive>/takeout-zips-wife)")
     ap.add_argument("--label", default="wife", help="name used in the report file name")
+    ap.add_argument("--extract-to", metavar="STAGING", help="unpack only the new files (and their sidecars) here")
+    ap.add_argument("--also-discarded", action="store_true",
+                    help="with --extract-to: also unpack files identical to something in quarantine")
+    ap.add_argument("--apply", action="store_true", help="with --extract-to: really unpack (default is a plan only)")
     a = ap.parse_args()
     zdir = a.zips or os.path.join(a.archive, "takeout-zips-wife")
     zips = sorted(glob.glob(os.path.join(zdir, "*.zip")))
@@ -223,7 +287,30 @@ def main():
             if len(entries) > 1:
                 f.write(f"{entries[0][1]}\n" + "".join(f"      also {e[1]}\n" for e in entries[1:]))
     print(f"\nFull lists: {rpt}")
-    print("Nothing was unpacked, moved or changed.")
+    if not a.extract_to:
+        print("Nothing was unpacked, moved or changed.")
+        print("To unpack only the new files:  scripts/takeout_compare.py --extract-to STAGING   (then add --apply)")
+        return
+
+    chosen = [(e[0][0], e[0][1]) for _, e, _ in new] + ([(e[0][0], e[0][1]) for _, e, _ in in_quar] if a.also_discarded else [])
+    zpath = {os.path.basename(z): z for z in zips}
+    plan = plan_extract(zpath, chosen)
+    n_all = sum(len(v) for v in plan.values())
+    n_json = sum(1 for v in plan.values() for i in v if i.filename.lower().endswith(".json"))
+    need = sum(i.file_size for v in plan.values() for i in v)
+    os.makedirs(os.path.dirname(os.path.abspath(a.extract_to)), exist_ok=True)
+    free = shutil.disk_usage(os.path.dirname(os.path.abspath(a.extract_to))).free
+    print(f"\nUnpacking plan: {len(chosen):,} photos/videos{' (including ones matching quarantine)' if a.also_discarded else ''}"
+          f" + {n_json:,} sidecar .json files = {n_all:,} files, {gb(need)}, into {a.extract_to}")
+    print(f"Free space there: {gb(free)}")
+    if free < need * 1.1:
+        sys.exit("Not enough free space. Nothing unpacked.")
+    if not a.apply:
+        print("This was a plan. Add --apply to unpack. (Nothing has been written.)")
+        return
+    done, skipped = extract(zpath, plan, a.extract_to)
+    print(f"\nUnpacked {done:,} file(s); {skipped:,} were already there. Next: scripts/import_takeout.py "
+          f"--staging {a.extract_to} --dest <archive>/originals/google-wife --report <archive>/takeout-import-report-wife.txt")
 
 
 if __name__ == "__main__":

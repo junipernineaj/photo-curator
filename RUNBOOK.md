@@ -317,11 +317,13 @@ cd /media/aj9/Juniper13/photo-archive/takeout-zips-wife && for z in takeout-*.zi
 cd ~/photo-curator && git pull && scripts/scan_archive.py       # first make sure the index is current
 scripts/takeout_compare.py
 
-# 4. only after looking at the report: unpack (tmux; long), dry-run the import, then do it
-mkdir -p /media/aj9/Juniper13/photo-archive/takeout-unpacked-wife && cd /media/aj9/Juniper13/photo-archive/takeout-unpacked-wife
-for z in ../takeout-zips-wife/takeout-*.zip; do echo "== $z"; unzip -q -o "$z"; done
-cd ~/photo-curator
+# 4. only after looking at the report. Unpack ONLY what is new (plan first, then --apply), dry-run the import, then do it
 A=/media/aj9/Juniper13/photo-archive
+cd ~/photo-curator
+scripts/takeout_compare.py --zips $A/takeout-zips-wife --extract-to $A/takeout-unpacked-wife            # plan: files and space needed
+scripts/takeout_compare.py --zips $A/takeout-zips-wife --extract-to $A/takeout-unpacked-wife --apply    # unpack the new ones (+ their .json sidecars)
+#   (add --also-discarded to include files identical to something you sent to quarantine; to unpack EVERYTHING instead:
+#    mkdir -p $A/takeout-unpacked-wife && cd $A/takeout-unpacked-wife && for z in ../takeout-zips-wife/takeout-*.zip; do unzip -q -o "$z"; done)
 scripts/import_takeout.py --staging $A/takeout-unpacked-wife --dest $A/originals/google-wife --report $A/takeout-import-report-wife.txt
 scripts/import_takeout.py --staging $A/takeout-unpacked-wife --dest $A/originals/google-wife --report $A/takeout-import-report-wife.txt --apply
 
