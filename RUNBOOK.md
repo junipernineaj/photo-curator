@@ -446,6 +446,10 @@ no keeper.  `scripts/quarantine.py` (dry run) lists every such photo by name und
 before moving it, and logs it with the rule "similar: discarded all (no copy kept)".  It goes to quarantine like
 everything else, so it can be restored for 30 days (`--restore BATCH --path SUB`) before any purge.
 
+The **"Which photos"** drop-down narrows the list: *Added today* (any photo in the group was indexed today, so you
+see only what the latest import brought in), *Groups with her photos* (anything under `google-wife/`) or *Groups with
+none of hers* (your own photos only, the safe place to work first).
+
 Picks are stored in `curator_edits.sqlite` (table `sim_mark`).  The page never moves a file.  Run on the server:
 
     scripts/quarantine.py            # dry run: also lists the near-duplicate picks

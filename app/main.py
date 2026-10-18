@@ -60,7 +60,7 @@ FILES = (
     "(SELECT f.id, f.path, f.kind, f.ext, f.size, f.mtime_ns, f.sha1, "
     "COALESCE(o.taken_at, f.taken_at) AS taken_at, "
     "CASE WHEN o.taken_at IS NOT NULL THEN 'manual' ELSE f.date_source END AS date_source, "
-    "f.width, f.height, f.make, f.model, f.content_id, f.pair_key, f.has_sidecar "
+    "f.width, f.height, f.make, f.model, f.content_id, f.pair_key, f.has_sidecar, f.scanned_at "
     "FROM main.files f LEFT JOIN ed.date_override o ON o.path = f.path)"
 )
 
@@ -659,7 +659,7 @@ def similar_page(request: Request, db=Depends(get_db), page: int = 1, kind: str 
 REVIEW_CHUNK = 25
 
 
-def review_filters(kind, view):
+def review_filters(kind, view, which=""):
     where, having = [], ["SUM(m.path IS NULL) > 0" if view != "decided" else "SUM(m.path IS NULL) = 0"]
     src_g = ("CASE WHEN instr(g.path, '/') > 0 THEN substr(g.path, 1, instr(g.path, '/') - 1) "
              "ELSE '' END")
@@ -672,6 +672,13 @@ def review_filters(kind, view):
         where.append("i.span_s > 10")
     elif kind == "unknown":
         where.append("i.span_s IS NULL")
+    # which photos: a group qualifies when ANY of its photos matches (or, for "mine", when none is hers)
+    if which == "new":      # something in the group was indexed today (local time)
+        having.append("SUM(date(f.scanned_at) = date('now', 'localtime')) > 0")
+    elif which == "hers":
+        having.append("SUM(f.path LIKE 'google-wife/%') > 0")
+    elif which == "mine":
+        having.append("SUM(f.path LIKE 'google-wife/%') = 0")
     return (("WHERE " + " AND ".join(where)) if where else ""), "HAVING " + " AND ".join(having)
 
 
@@ -693,9 +700,9 @@ def review_totals(db):
             "done": done, "left": max(total - done, 0), "pct": round(done * 100.0 / total, 1) if total else 0.0}
 
 
-def review_page(db, kind, view, order, start, n):
+def review_page(db, kind, view, order, start, n, which=""):
     """The groups for one chunk of the list, and how many groups the whole list holds."""
-    where, having = review_filters(kind, view)
+    where, having = review_filters(kind, view, which)
     base = (f"FROM sim.sim_group g JOIN {FILES} f ON f.path = g.path "
             f"LEFT JOIN sim.sim_info i ON i.group_id = g.group_id "
             f"LEFT JOIN ed.sim_mark m ON m.path = g.path {where} GROUP BY g.group_id {having}")
@@ -743,30 +750,31 @@ def review_page(db, kind, view, order, start, n):
     return groups, shown
 
 
-def review_args(kind, view, order):
-    return (kind if kind in ("cross", "burst", "spread", "unknown") else "",
+def review_args(kind, view, order, which=""):
+    return (which if which in ("new", "hers", "mine") else "",
+            kind if kind in ("cross", "burst", "spread", "unknown") else "",
             "decided" if view == "decided" else "pending",
             order if order in ("group", "count", "oldest", "newest") else "space")
 
 
 @app.get("/similar/review", response_class=HTMLResponse)
 def similar_review(request: Request, db=Depends(get_db), kind: str = "", view: str = "pending",
-                   order: str = "space", msg: str = ""):
-    kind, view, order = review_args(kind, view, order)
+                   order: str = "space", which: str = "", msg: str = ""):
+    which, kind, view, order = review_args(kind, view, order, which)
     built = db.execute("SELECT v FROM sim.sim_meta WHERE k = 'built_at'").fetchone()
-    groups, shown = review_page(db, kind, view, order, 0, REVIEW_CHUNK)
+    groups, shown = review_page(db, kind, view, order, 0, REVIEW_CHUNK, which)
     return templates.TemplateResponse(request, "similar_review.html", {
         "q_n": quarantine_held(db)[0], "q_bytes": quarantine_held(db)[1],
-        "groups": groups, "f": {"kind": kind, "view": view, "order": order}, "built": built[0] if built else None,
+        "groups": groups, "f": {"kind": kind, "view": view, "order": order, "which": which}, "built": built[0] if built else None,
         "shown": shown, "chunk": REVIEW_CHUNK, "msg": msg, **review_totals(db)})
 
 
 @app.get("/similar/review/chunk")
 def similar_review_chunk(db=Depends(get_db), kind: str = "", view: str = "pending", order: str = "space",
-                         start: int = 0):
+                         start: int = 0, which: str = ""):
     """The next slice of the list as ready-made HTML, for the page to append."""
-    kind, view, order = review_args(kind, view, order)
-    groups, shown = review_page(db, kind, view, order, max(start, 0), REVIEW_CHUNK)
+    which, kind, view, order = review_args(kind, view, order, which)
+    groups, shown = review_page(db, kind, view, order, max(start, 0), REVIEW_CHUNK, which)
     html = templates.get_template("_review_groups.html").render(groups=groups)
     return JSONResponse({"html": html, "n": len(groups), "chunk": REVIEW_CHUNK, "shown": shown})
 
