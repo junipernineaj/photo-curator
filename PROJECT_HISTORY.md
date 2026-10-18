@@ -451,3 +451,10 @@ still to do after the import.
 quarantine), 6,483 new (22.8 GB; 2013 to 2026, mostly 2013-2015, 2017 and 2025). The two Google libraries clearly overlap heavily. Unpacking everything would
 need 337 GB, so `takeout_compare.py` gained `--extract-to STAGING [--apply] [--also-discarded]`: unpacks only the new files plus their .json sidecars
 (writes only to the staging folder, never into the archive; dry-run by default). RUNBOOK step 4 updated.
+
+12:30, 18 Oct: wife's Takeout imported. Extraction now records per-file problems and ends with "present in staging: N of M" (a second zip had the same sidecar
+name; harmless). Dry run first found only 5,576 of 6,483 media: some of her zips unpacked to a bare `Google Photos/<year>/<album>` tree beside
+`Takeout/Google Photos`, and the importer only looks at the latter (907 photos, no Google sidecars). Fix was to move those folders across by hand (no name clashes);
+if it recurs, the importer should read both trees. Import moved all 6,483 into `originals/google-wife` (1 second, same-disk rename); scan indexed them in 408 s
+(85,556 files, 319.6 GB, 5 exact-duplicate groups); `find_similar.py` built 12,342 groups in all. Review page got a "Which photos" filter (added today / groups with
+her photos / groups with none of hers). Tony reviewed 200+ groups. Still to do: quarantine run, backup, offsite refresh, then remove her zips and staging.

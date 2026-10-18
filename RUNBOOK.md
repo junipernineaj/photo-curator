@@ -347,6 +347,11 @@ Things to watch once hers is in:
 - Items identical to something in quarantine would come back as "new" once imported, and are listed in the compare report so you can see them.
 - Keep her zips until the import is backed up; they are the second copy of her Google data.
 
+
+**Gotcha seen on the first run:** some zips unpack to a bare `Google Photos/<year>/<album>` folder next to `Takeout/Google Photos`, and the importer only reads
+the second.  Before importing, check `ls $A/takeout-unpacked-wife`; if a top-level `Google Photos` exists, move its sub-folders into `Takeout/Google Photos/`
+(after checking for name clashes), then re-run the dry run: the media count should equal the "present in staging" figure printed by the extraction.
+
 ## Run the browse app
 
 A read-only web page over the scan index: a thumbnail grid you can filter by year, type
